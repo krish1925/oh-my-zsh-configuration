@@ -1,8 +1,15 @@
 # Oh My Zsh Configuration
 
 This repository contains a personalized and optimized `.zshrc` configuration for Zsh using Oh My Zsh and the Powerlevel10k theme.
-
 ## Prerequisites
+
+<img width="565" alt="image" src="https://github.com/user-attachments/assets/53b4d020-f72b-40a0-a8ce-c76a306138c8" />
+<img width="564" alt="image" src="https://github.com/user-attachments/assets/bdecd75f-81be-4aa3-898a-78fc0f444a29" />
+<img width="768" alt="image" src="https://github.com/user-attachments/assets/f93ba5b1-e78c-425b-a2d8-87120e9e80ec" />
+<img width="764" alt="image" src="https://github.com/user-attachments/assets/4f8a7dc6-d2f3-4e40-8738-c885469fa7bc" />
+
+
+
 
 - A modern terminal application. [iTerm2](https://iterm2.com/) is recommended for macOS.
 - [Homebrew](https://brew.sh/) for installing packages on macOS.
