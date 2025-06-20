@@ -22,50 +22,77 @@ This repository contains a personalized and optimized `.zshrc` configuration for
 -   **Useful Aliases**: A rich set of aliases for common commands (`gs` for `git status -sb`, `..` for `cd ..`, etc.).
 -   **Auto-Correction**: Automatically corrects typos in commands.
 
-## Setup
+## Setup Guide
 
-1.  **Prerequisites**
-    -   A modern terminal like [iTerm2](https://iterm2.com/).
-    -   [Homebrew](https://brew.sh/) for package installation.
+### 1. Prerequisites
 
-2.  **Installation**
+-   A modern terminal application like [iTerm2](https://iterm2.com/) (recommended for macOS).
+-   [Homebrew](https://brew.sh/) for installing packages on macOS.
+
+### 2. Installation
+
+1.  **Install Oh My Zsh**
+    If you don't already have Oh My Zsh installed, run the following command:
     ```bash
-    # Install Oh My Zsh
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    ```
 
-    # Clone this repository
+2.  **Clone this Repository**
+    Clone this repository to a location on your local machine (e.g., `~/.oh-my-zsh-config`).
+    ```bash
     git clone https://github.com/your-username/oh-my-zsh-configuration.git ~/.oh-my-zsh-config
+    ```
 
-    # Backup and link .zshrc
+3.  **Backup and Link `.zshrc`**
+    Backup your existing `.zshrc` and create a symbolic link to the one in this repository.
+    ```bash
     mv ~/.zshrc ~/.zshrc.bak
     ln -s ~/.oh-my-zsh-config/.zshrc ~/.zshrc
+    ```
 
-    # Install the required font
+4.  **Install Required Font**
+    Powerlevel10k uses a special font to render icons. The recommended one is MesloLGS NF.
+    ```bash
     brew install --cask font-meslo-lg-nerd-font
     ```
 
-3.  **Configuration**
-    -   **Set Terminal Font**: In your terminal's preferences, change the font to `MesloLGS NF`.
-    -   **Powerlevel10k Wizard**: Run `p10k configure` in your terminal.
-        -   **Resizing Glitch Fix**: When asked for "Prompt Connection", choose **(3) No** to avoid visual glitches when resizing the terminal.
+### 3. Configuration
 
-4.  **Restart Zsh**
+1.  **Set Terminal Font**
+    -   Open your terminal's preferences and select `MesloLGS NF` as your font.
+    -   **For Terminal.app**: `Preferences` → `Profiles` → `Text` → `Font` → `Change...`.
+    -   **For iTerm2**: `Preferences` (`⌘ + ,`) → `Profiles` → `Text` → `Font` → `Change...`.
+
+2.  **Configure Powerlevel10k**
+    -   The Powerlevel10k configuration wizard should start automatically. If not, run `p10k configure`.
+    -   During the setup, when asked to choose a **"Prompt Connection"**, select **(3) No**. This disables the connecting lines between prompt segments and prevents a common resizing glitch.
+
+3.  **Restart Zsh**
+    -   For all changes to take effect, restart your terminal or run:
     ```bash
     exec zsh
     ```
 
+## Known Issues
+
+### Resizing Glitch
+
+There is a known issue where resizing the terminal window horizontally can cause the prompt to misalign. This is largely mitigated by choosing not to have prompt connectors (`.`, `_`, or `/`) during the `p10k configure` setup.
+
 ## Uninstall
 
-To revert the changes:
+To revert to your previous configuration:
 
-```bash
-# Remove the symbolic link
-rm ~/.zshrc
-
-# Restore your old .zshrc
-mv ~/.zshrc.bak ~/.zshrc
-
-# (Optional) Remove the cloned repo
-rm -rf ~/.oh-my-zsh-config
-```
-And change your terminal font back to your previous preference.
+1.  **Remove the symbolic link:**
+    ```bash
+    rm ~/.zshrc
+    ```
+2.  **Restore your backup `.zshrc`:**
+    ```bash
+    mv ~/.zshrc.bak ~/.zshrc
+    ```
+3.  **(Optional) Remove the cloned repository:**
+    ```bash
+    rm -rf ~/.oh-my-zsh-config
+    ```
+4.  **Revert your terminal font** to your previous preference.
