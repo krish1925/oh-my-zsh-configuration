@@ -120,7 +120,7 @@ This configuration transforms your standard terminal into a modern, intelligent,
    - **iTerm2**: `Preferences` → `Profiles` → `Text` → `Font` → Select "MesloLGS NF"
    - **VS Code Terminal**: Add to settings.json:
      ```json
-     "terminal.integrated.fontFamily": "MesloLGS NF"
+     "terminal.integrated.fontFamily": "Hack Nerd Font",
      ```
 
 ### 4. Powerlevel10k Configuration
