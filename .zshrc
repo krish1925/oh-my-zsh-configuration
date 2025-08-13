@@ -18,6 +18,25 @@ if [[ -n "${TERM_PROGRAM}" ]]; then
   esac
 fi
 
+# =====================================================
+# ENHANCED ZSH CONFIGURATION
+# Optimized for performance, functionality, and maintainability
+# =====================================================
+
+# ===== PERFORMANCE SETTINGS (MUST BE FIRST) =====
+# These settings significantly improve startup time
+DISABLE_AUTO_UPDATE="true"
+DISABLE_MAGIC_FUNCTIONS="true"
+DISABLE_UNTRACKED_FILES_DIRTY="true"
+ZLE_RPROMPT_INDENT=0
+
+if [[ -n "${TERM_PROGRAM}" ]]; then
+  case "${TERM_PROGRAM}" in
+    "vscode") POWERLEVEL9K_INSTANT_PROMPT=off ;;
+    "iTerm.app") POWERLEVEL9K_TERM_SHELL_INTEGRATION=true ;;
+  esac
+fi
+
 # Path to your Oh My Zsh installation
 export ZSH="$HOME/.oh-my-zsh"
 
@@ -40,7 +59,6 @@ POWERLEVEL9K_VCS_UNSTAGED_MAX_NUM=10
 # If you have font issues, uncomment this line:
 # POWERLEVEL9K_MODE='compatible'
 # Disable gap filler to prevent width issues
-
 
 # ===== OH MY ZSH SETTINGS =====
 # Case-insensitive completion
@@ -106,17 +124,26 @@ ZSH_AUTOSUGGEST_USE_ASYNC=true
 ZSH_AUTOSUGGEST_MANUAL_REBIND=1
 ZSH_AUTOSUGGEST_COMPLETION_IGNORE="git *"
 
-# Source Oh My Zsh
-source $ZSH/oh-my-zsh.sh
+# Skip compaudit security check for faster loading
+export ZSH_DISABLE_COMPFIX=true
 
 # ===== SMART COMPLETION CONFIGURATION =====
 # Optimized completion loading
 autoload -Uz compinit
-if [[ -n ${ZDOTDIR}/.zcompdump(#qN.mh+24) ]]; then
+for dump in ~/.zcompdump(N.mh+24); do
   compinit
-else
-  compinit -C
-fi
+done
+[[ -f ~/.zcompdump ]] && compinit -C
+
+# Compile zsh files for faster loading
+{
+  setopt LOCAL_OPTIONS EXTENDED_GLOB
+  autoload -U zrecompile
+  local f
+  for f in ~/.zcompdump ~/.zshrc ${ZDOTDIR:-~}/.zshrc; do
+    [[ -f "$f" && ( ! -f "${f}.zwc" || "$f" -nt "${f}.zwc" ) ]] && zrecompile -pq "$f"
+  done
+}
 
 autoload -Uz bashcompinit && bashcompinit
 
@@ -152,6 +179,9 @@ zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
 # SSH/SCP/RSYNC host completion
 zstyle ':completion:*:(ssh|scp|rsync):*' tag-order 'hosts:-host:host hosts:-domain:domain hosts:-ipaddr:ip\ address *'
 zstyle ':completion:*:(ssh|scp|rsync):*' group-order users files all-files hosts-domain hosts-host hosts-ipaddr
+
+# Source Oh My Zsh
+source $ZSH/oh-my-zsh.sh
 
 # ===== PATH CONFIGURATION =====
 # Deduplicate PATH entries
@@ -245,7 +275,7 @@ alias mkdir='mkdir -pv'
 alias h='history'
 alias j='jobs -l'
 alias which='type -a'
-alias path='echo -e ${PATH//:/\\n}'
+alias path='echo -e ${PATH//:/\n}'
 alias now='date +"%T"'
 alias nowdate='date +"%Y-%m-%d"'
 alias week='date +%V'
@@ -439,6 +469,70 @@ hist-clean() {
   echo "History cleaned and deduplicated"
 }
 
+# ===== AUTO PYTHON EXECUTION =====
+# Automatically run .py files when typed in terminal
+command_not_found_handler() {
+  local cmd="$1"
+  
+  # Check if the command ends with .py
+  if [[ "$cmd" == *.py ]]; then
+    # Check if the file exists in current directory
+    if [[ -f "$cmd" ]]; then
+      echo "🐍 Auto-executing Python script: $cmd"
+      python "$cmd" "${@:2}"  # Pass any additional arguments
+      return $?
+    # Check if file exists with .py extension added
+    elif [[ -f "${cmd}.py" ]]; then
+      echo "🐍 Auto-executing Python script: ${cmd}.py"
+      python "${cmd}.py" "${@:2}"
+      return $?
+    fi
+  # Check if command without extension has a .py file
+  elif [[ -f "${cmd}.py" ]]; then
+    echo "🐍 Auto-executing Python script: ${cmd}.py"
+    python "${cmd}.py" "${@:2}"
+    return $?
+  fi
+  
+  # If not a Python file or file doesn't exist, show normal error
+  echo "zsh: command not found: $cmd" >&2
+  return 127
+}
+
+# Alternative: Create an alias for even faster execution (optional)
+alias py='python'
+
+# Make Python files executable and auto-run (advanced option)
+# Uncomment the following function if you want to make .py files executable automatically
+# make_executable() {
+#   if [[ "$1" == *.py ]] && [[ -f "$1" ]]; then
+#     chmod +x "$1"
+#     echo "Made $1 executable"
+#   fi
+# }
+
+# Auto-activate virtual environment if present (optional)
+auto_venv() {
+  if [[ -f "venv/bin/activate" ]]; then
+    echo "🌱 Virtual environment detected, activating..."
+    source venv/bin/activate
+  elif [[ -f ".venv/bin/activate" ]]; then
+    echo "🌱 Virtual environment detected, activating..."
+    source .venv/bin/activate
+  fi
+}
+
+# Auto-completion for Python files
+_python_files() {
+  local files
+  files=(*.py(N))
+  [[ ${#files} -gt 0 ]] && _describe 'python files' files
+}
+
+# Register completion for common Python script names
+compdef _python_files script
+compdef _python_files run
+
 # ===== KEY BINDINGS =====
 # History search with arrows
 bindkey '^[[A' history-substring-search-up
@@ -492,6 +586,7 @@ nvm() {
 
 # Load fzf last (after instant prompt)
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
 # ===== FINAL CUSTOMIZATIONS =====
 # Load machine-specific settings if they exist
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
@@ -513,3 +608,8 @@ fi
 if [[ -o interactive ]]; then
   echo "Welcome back, $(whoami)! Today is $(date '+%A, %B %d')"
 fi
+# alias python="/opt/homebrew/bin/python3"
+
+# Auto-activate conda base environment
+# conda activate base
+export PATH="$PWD:$PATH"
