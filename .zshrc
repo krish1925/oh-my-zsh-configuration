@@ -1,22 +1,25 @@
 #!/usr/bin/env zsh
 # =====================================================
-# OPTIMIZED ZSH CONFIGURATION 2025
-# Modern toolkit with aggressive performance tuning
-# Target: <200ms startup with full OMZ ecosystem
+# OPTIMIZED ZSH CONFIGURATION — kpatel M4 Pro 24GB
+# Ghostty + OMZ + Powerlevel10k + kollzsh
+# Target: <200ms startup · 100% local · Catppuccin Mocha
+# Last updated: March 2026
 # =====================================================
 
 # ===== PERFORMANCE SETTINGS (MUST BE FIRST) =====
+
 DISABLE_AUTO_UPDATE="true"
 DISABLE_MAGIC_FUNCTIONS="true"
 DISABLE_UNTRACKED_FILES_DIRTY="true"
 ZSH_DISABLE_COMPFIX=true
 ZLE_RPROMPT_INDENT=0
 
-# Terminal-specific settings
+# ===== TERMINAL-SPECIFIC SETTINGS =====
 if [[ -n "${TERM_PROGRAM}" ]]; then
   case "${TERM_PROGRAM}" in
-    "vscode") POWERLEVEL9K_INSTANT_PROMPT=off ;;
-    "iTerm.app") POWERLEVEL9K_TERM_SHELL_INTEGRATION=true ;;
+    "vscode")      POWERLEVEL9K_INSTANT_PROMPT=off ;;
+    "iTerm.app")   POWERLEVEL9K_TERM_SHELL_INTEGRATION=true ;;
+    "ghostty")     ;;  # Ghostty handles shell integration via config
   esac
 fi
 
@@ -29,7 +32,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-# ===== THEME CONFIGURATION =====
+# ===== THEME =====
 ZSH_THEME="powerlevel10k/powerlevel10k"
 
 # Powerlevel10k performance optimizations
@@ -45,53 +48,63 @@ POWERLEVEL9K_TRANSIENT_PROMPT=always
 CASE_SENSITIVE="false"
 HYPHEN_INSENSITIVE="true"
 zstyle ':omz:update' mode disabled
-DISABLE_CORRECTION="true"  # Disable annoying corrections
+DISABLE_CORRECTION="true"
 COMPLETION_WAITING_DOTS="true"
 ZSH_COMPDUMP="$ZSH_CACHE_DIR/.zcompdump"
 
-# ===== OPTIMIZED HISTORY CONFIGURATION =====
+# ===== HISTORY =====
 HISTFILE="${HOME}/.zsh_history"
 HISTSIZE=100000
 SAVEHIST=100000
 HIST_STAMPS="yyyy-mm-dd"
-LISTMAX=0  # Never ask "do you wish to see all N possibilities?"
+LISTMAX=0
 
-# History options (SHARE_HISTORY includes INC_APPEND_HISTORY)
-setopt EXTENDED_HISTORY          # Save timestamps and duration
-setopt SHARE_HISTORY             # Share across all sessions
-setopt HIST_EXPIRE_DUPS_FIRST    # Expire duplicates first when trimming
-setopt HIST_IGNORE_ALL_DUPS      # Remove older duplicate entries
-setopt HIST_FIND_NO_DUPS         # Skip duplicates in search
-setopt HIST_IGNORE_SPACE         # Commands starting with space are secret
-setopt HIST_SAVE_NO_DUPS         # No duplicates in saved file
-setopt HIST_REDUCE_BLANKS        # Remove extra whitespace
-setopt HIST_VERIFY               # Expand !! before executing
+setopt EXTENDED_HISTORY
+setopt SHARE_HISTORY
+setopt HIST_EXPIRE_DUPS_FIRST
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_FIND_NO_DUPS
+setopt HIST_IGNORE_SPACE
+setopt HIST_SAVE_NO_DUPS
+setopt HIST_REDUCE_BLANKS
+setopt HIST_VERIFY
 
-# ===== LEAN PLUGIN LIST =====
-# Keep it minimal: each plugin adds startup overhead
-plugins=(
-  git                      # Lightweight, useful aliases
-  zsh-autosuggestions      # Fish-like inline suggestions
-  zsh-syntax-highlighting  # MUST BE LAST
-)
-
-# ===== ZSH AUTOSUGGESTIONS OPTIMIZATION =====
+# ===== ZSH AUTOSUGGESTIONS CONFIG (before plugins load) =====
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
+ZSH_AUTOSUGGEST_USE_ASYNC=1                  # FIX: was missing, caused blocking suggestions
 
-# ===== ZSH SYNTAX HIGHLIGHTING OPTIMIZATION =====
+# ===== ZSH SYNTAX HIGHLIGHTING CONFIG (before plugins load) =====
+# NOTE: fast-syntax-highlighting replaces zsh-syntax-highlighting
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
 ZSH_HIGHLIGHT_MAXLENGTH=512
 
-# ===== OPTIMIZED COMPINIT (REGENERATE ONCE DAILY) =====
+# ===== PLUGIN LIST =====
+# Order is critical — deviations cause subtle breakage
+plugins=(
+  git                          # Lightweight, useful aliases
+  colored-man-pages            # Free, built-in OMZ
+  sudo                         # ESC ESC prepends sudo
+  fzf-tab                      # MUST be before autosuggestions
+  zsh-autosuggestions          # Fish-like inline suggestions
+  zsh-autopair                 # Auto-close brackets/parens/quotes
+  you-should-use               # Reminds you of existing aliases
+  forgit                       # fzf-powered interactive git
+  kollzsh                      # Ctrl+O → local LLM completions
+  zsh-autoswitch-virtualenv    # Auto-activate .venv on cd
+  zsh-completions              # 100+ extra completions (mlx-lm, uv, etc.)
+  history-substring-search     # Up-arrow = mid-string history search
+  fast-syntax-highlighting     # MUST be last (replaces zsh-syntax-highlighting)
+)
+
+# ===== OPTIMIZED COMPINIT (ONCE DAILY) =====
 autoload -Uz compinit
 if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
   compinit
 else
-  compinit -C   # Use cache, skip security check
+  compinit -C
 fi
-
 autoload -Uz bashcompinit && bashcompinit
 
 # ===== SOURCE OH MY ZSH =====
@@ -100,8 +113,55 @@ source $ZSH/oh-my-zsh.sh
 # Remove annoying safety aliases from OMZ
 unalias rm cp mv 2>/dev/null
 
+# ===== POST-PLUGIN CONFIGURATION =====
+
+# --- fzf-tab ---
+# Preview dirs with eza, git with delta; switch groups with < >
+zstyle ':completion:*:git-checkout:*' sort false
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*' menu no
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza --tree --color=always $realpath'
+zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'eza --tree --color=always $realpath'
+zstyle ':fzf-tab:*' use-fzf-default-opts yes
+zstyle ':fzf-tab:*' switch-group '<' '>'
+
+# --- history-substring-search (rebind AFTER OMZ sources) ---
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND='bg=green,fg=black,bold'
+HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND='bg=red,fg=white,bold'
+
+# --- you-should-use ---
+export YSU_MESSAGE_POSITION='after'
+export YSU_MODE=ALL
+
+# --- zsh-autoswitch-virtualenv ---
+export AUTOSWITCH_MESSAGE_FORMAT='🐍 %venv_name (%py_version)'
+
+# --- forgit (disable default aliases to avoid collisions with existing ones) ---
+export FORGIT_NO_ALIASES=true
+alias gifa='forgit::add'
+alias gifl='forgit::log'
+alias gifd='forgit::diff'
+alias gifco='forgit::checkout::file'
+alias gifss='forgit::stash::show'
+alias gifcb='forgit::checkout::branch'
+alias gifcm='forgit::checkout::commit'
+alias gifri='forgit::rebase'
+alias gifrb='forgit::rebase'
+alias gifcp='forgit::cherry-pick'
+alias gifcln='forgit::clean'
+alias gifix='forgit::fixup'
+
+# --- kollzsh (Ctrl+O → local LLM shell completions via Ollama) ---
+KOLLZSH_MODEL='qwen2.5-coder:1.5b'
+KOLLZSH_HOTKEY='^o'
+KOLLZSH_COMMAND_COUNT=5
+KOLLZSH_URL='http://localhost:11434'
+KOLLZSH_KEEP_ALIVE='30m'
+
 # ===== PATH CONFIGURATION =====
-typeset -U path  # Deduplicate PATH entries
+typeset -U path
 path=(
   /Users/kpatel/.codeium/windsurf/bin
   /opt/homebrew/opt/openjdk/bin
@@ -118,27 +178,47 @@ export PATH
 export LANG=en_US.UTF-8
 export EDITOR='nvim'
 export VISUAL="$EDITOR"
+
+# Emacs — always terminal mode by default, never spawn GUI window
+alias emacs='command emacs -nw'
+alias em='emacs'
+alias e='emacs'
 export LESS='-R -F -g -i -J -M -W -x4'
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
-# LS Colors for modern tools
+# LS Colors
 export CLICOLOR=1
 export LSCOLORS=exfxcxdxbxegedabagacad
 export LS_COLORS='di=34:ln=35:so=32:pi=33:ex=31:bd=34;46:cd=34;43:su=30;41:sg=30;46:tw=30;42:ow=30;43'
 
-# ===== MODERN CLI TOOLS: RUST-POWERED REPLACEMENTS =====
-
-# Eza (ls replacement) - exa is deprecated
+# ===== EZA (LS REPLACEMENT) =====
 if command -v eza > /dev/null; then
   alias ls='eza --color=always --icons=always --group-directories-first'
   alias ll='eza -l --header --icons=always --git --group-directories-first --time-style=relative'
   alias la='eza -la --header --icons=always --git --group-directories-first'
   alias lt='eza --tree --level=2 --icons=always --group-directories-first'
-  alias llm='eza -la --icons=always --git --sort=modified'
-  alias lsize='eza -la --icons=always --git --sort=size'
+  alias lta='eza --tree --level=2 --icons=always --group-directories-first -a'
+  alias ltree='eza --tree --icons=always --group-directories-first'
+
+  # Time-based
+  alias llm='eza -la --icons=always --git --sort=modified --reverse'
+  alias llo='eza -la --icons=always --git --sort=oldest'
+  alias llc='eza -la --icons=always --git --sort=created'
+
+  # Size-based
+  alias lsize='eza -la --icons=always --git --sort=size --reverse'
+  alias lsmall='eza -la --icons=always --git --sort=size'
+
+  # Type-specific
+  alias ldirs='eza -lD --icons=always'
+  alias lfiles='eza -lf --icons=always --git'
+  alias lexec='eza -l --icons=always | grep "^-..x"'
+
+  # Git-aware
+  alias lgit='eza -la --icons=always --git --git-ignore'
+  alias lmod='eza -la --icons=always --git --modified'
 else
-  # Fallback to standard ls with colors
   alias ls='ls --color=auto'
   alias ll='ls -alFh'
   alias la='ls -A'
@@ -146,46 +226,73 @@ else
   alias lsize='ls -lhSr'
 fi
 
-# Bat (cat replacement with syntax highlighting)
+# ===== BAT (CAT REPLACEMENT) =====
 if command -v bat > /dev/null; then
-  export BAT_THEME="tokyonight_night"
+  export BAT_THEME="Catppuccin-mocha"
+  export BAT_STYLE="numbers,changes,header,grid"
+
   alias cat='bat --paging=never'
+  alias catt='bat --paging=always'
+  alias catp='bat --plain'
+  alias catl='bat --language'
+  alias batdiff='git diff --name-only --relative --diff-filter=d | xargs bat --diff'
+
   export MANPAGER="sh -c 'col -bx | bat -l man -p'"
   export MANROFFOPT="-c"
-  
-  # Colorized --help output
-  help() { "$@" --help 2>&1 | bat --plain --language=help; }
+
+  help() {
+    "$@" --help 2>&1 | bat --plain --language=help
+  }
 fi
 
-# Zoxide (smart cd replacement)
+# ===== ZOXIDE (SMART CD) =====
 if command -v zoxide > /dev/null; then
   eval "$(zoxide init zsh)"
-  alias cd='z'
+  # FIX: removed alias cd='z' — conflicts with custom cd() function below
+  alias cdi='zi'         # Interactive zoxide
+  alias cdb='z -'        # Go back
+  alias cdl='zoxide query -l'
+  alias cdr='zoxide remove'
 fi
 
-# ===== RIPGREP CONFIGURATION =====
+# ===== RIPGREP =====
 if command -v rg > /dev/null; then
+  # FIX: removed cat > ~/.ripgreprc block — run once manually, not on every shell open
+  # One-time setup: mkdir -p ~/.config/ripgrep && cat > ~/.ripgreprc <<'EOF' ... EOF
   export RIPGREP_CONFIG_PATH="$HOME/.ripgreprc"
+
+  alias rg='rg --smart-case'
+  alias rga='rg --hidden --no-ignore'
+  alias rgf='rg --files-with-matches'
+  alias rgl='rg --files-without-match'
+  alias rgc='rg --count'
+  alias rgi='rg --ignore-case'
+  alias rgpy='rg --type=py'
+  alias rgjs='rg --type=js'
+  alias rgrs='rg --type=rust'
+
+  rge() {
+    local file line
+    read -r file line <<< $(rg --line-number --no-heading --color=always "$@" |
+      fzf --ansi --delimiter ':' --preview 'bat --color=always {1} --highlight-line {2}' |
+      awk -F: '{print $1, $2}')
+    [[ -n "$file" ]] && ${EDITOR:-nvim} "+$line" "$file"
+  }
 fi
 
-# ===== FZF CONFIGURATION =====
-# Complete fzf setup with modern preview integration
+# ===== FZF =====
 if command -v fzf > /dev/null; then
-  # Initialize fzf (0.48.0+ syntax)
   source <(fzf --zsh) 2>/dev/null || [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-  
-  # Use fd as default finder if available
+
   if command -v fd > /dev/null; then
     export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
     export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
     export FZF_ALT_C_COMMAND="fd --type=d --hidden --strip-cwd-prefix --exclude .git"
-    
-    # fd-powered completion generators
     _fzf_compgen_path() { fd --hidden --exclude .git . "$1"; }
     _fzf_compgen_dir() { fd --type=d --hidden --exclude .git . "$1"; }
   fi
-  
-  # Modern appearance with Catppuccin colors
+
+  # Catppuccin Mocha colors
   export FZF_DEFAULT_OPTS="
     --height=80% --layout=reverse --border --info=inline
     --color=fg:#cdd6f4,bg:#1e1e2e,hl:#f38ba8
@@ -193,8 +300,7 @@ if command -v fzf > /dev/null; then
     --color=info:#cba6f7,prompt:#94e2d5,pointer:#f5e0dc
     --color=marker:#f5e0dc,spinner:#f5e0dc,header:#f38ba8
   "
-  
-  # Ctrl+T: file search with bat preview
+
   if command -v bat > /dev/null; then
     export FZF_CTRL_T_OPTS="
       --walker-skip .git,node_modules,target,.venv
@@ -202,23 +308,20 @@ if command -v fzf > /dev/null; then
       --bind 'ctrl-/:change-preview-window(down|hidden|)'
     "
   fi
-  
-  # Alt+C: directory navigation with eza tree
+
   if command -v eza > /dev/null; then
     export FZF_ALT_C_OPTS="--preview 'eza --tree --color=always {} | head -200'"
   elif command -v tree > /dev/null; then
     export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
   fi
-  
-  # Ctrl+R: history with clipboard copy
+
   export FZF_CTRL_R_OPTS="
     --preview 'echo {}' --preview-window up:3:hidden:wrap
     --bind 'ctrl-/:toggle-preview'
     --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort'
     --header 'CTRL-Y to copy to clipboard'
   "
-  
-  # Smart preview function: bat for files, eza for directories
+
   _fzf_comprun() {
     local command=$1; shift
     case "$command" in
@@ -227,65 +330,198 @@ if command -v fzf > /dev/null; then
       *)            fzf --preview 'bat -n --color=always --line-range :500 {}' "$@" 2>/dev/null || fzf "$@" ;;
     esac
   }
-  
-  # macOS Alt+C fix: bind Option+C (ç) to fzf-cd-widget
+
+  # macOS: bind Option+C (ç) to fzf-cd-widget
   bindkey "ç" fzf-cd-widget
 fi
 
-# ===== ZSH OPTIONS: NAVIGATION & BEHAVIOR =====
-setopt AUTO_CD              # Type directory name to cd into it
-setopt AUTO_PUSHD           # Push dirs onto stack automatically
-setopt PUSHD_IGNORE_DUPS    # No duplicate stack entries
-setopt PUSHD_SILENT         # Don't print stack after pushd/popd
-setopt CDABLE_VARS          # Change directory to a path in variable
+# ===== FD (FIND REPLACEMENT) =====
+if command -v fd > /dev/null; then
+  alias find='fd'
+  alias fdf='fd --type f'
+  alias fdd='fd --type d'
+  alias fdx='fd --type x'
+  alias fdh='fd --hidden'
+  alias fda='fd --hidden --no-ignore'
 
-# Globbing
-setopt EXTENDED_GLOB        # Enable #, ~, ^ operators
-setopt GLOB_DOTS            # Include dotfiles in globs
-setopt NO_NOMATCH           # Pass unmatched globs through to commands
-setopt NUMERIC_GLOB_SORT    # Sort filenames numerically
+  fde() {
+    local file
+    file=$(fd --type f | fzf --preview 'bat --color=always {}')
+    [[ -n "$file" ]] && ${EDITOR:-nvim} "$file"
+  }
+fi
 
-# Completion
-setopt COMPLETE_IN_WORD     # Complete from middle of word
-setopt ALWAYS_TO_END        # Cursor moves to end after completion
-setopt AUTO_MENU            # Show menu on successive tab
-setopt LIST_PACKED          # Compact completion columns
+# ===== DELTA (GIT DIFF) =====
+if command -v delta > /dev/null; then
+  git config --global core.pager delta
+  git config --global interactive.diffFilter 'delta --color-only'
+  git config --global delta.navigate true
+  git config --global delta.light false
+  git config --global delta.side-by-side true
+  git config --global delta.line-numbers true
 
-# Misc
-setopt INTERACTIVE_COMMENTS # Allow # comments in interactive shell
-setopt NO_BEEP              # Silence the bell
-setopt NO_FLOW_CONTROL      # Free up Ctrl-S and Ctrl-Q
-setopt MULTIOS              # Enable multiple redirections
-setopt RM_STAR_SILENT       # Don't confirm rm * operations
+  alias gd='git diff | delta'
+  alias gds='git diff --staged | delta'
+  alias gshow='git show | delta'
+fi
 
-# Disable spelling correction (annoying)
+# ===== DUST (DU REPLACEMENT) =====
+if command -v dust > /dev/null; then
+  alias du='dust'
+  alias dua='dust -d 1'
+  alias dus='dust -r'
+  alias dux='dust -X .git -X node_modules -X .venv'
+fi
+
+# ===== PROCS (PS REPLACEMENT) =====
+if command -v procs > /dev/null; then
+  alias ps='procs'
+  alias psa='procs --sortd cpu'
+  alias psm='procs --sortd mem'
+  alias pst='procs --tree'
+  alias psw='procs --watch'
+  alias psg='procs --search'
+fi
+
+# ===== BOTTOM (TOP/HTOP REPLACEMENT) =====
+if command -v btm > /dev/null; then
+  alias top='btm'
+  alias htop='btm'
+  alias btm='btm --color default-light'
+  alias btmc='btm --basic'
+fi
+
+# ===== TEALDEER (TLDR) =====
+if command -v tldr > /dev/null; then
+  alias tldr='tldr --color=always'
+  alias tldru='tldr --update'
+  t() { tldr "$@" | bat -l markdown; }
+fi
+
+# ===== TOKEI (CODE STATS) =====
+if command -v tokei > /dev/null; then
+  alias stats='tokei'
+  alias statsa='tokei --sort lines'
+  alias statsf='tokei --files'
+  alias statst='tokei --type'
+fi
+
+# ===== HYPERFINE (BENCHMARKING) =====
+if command -v hyperfine > /dev/null; then
+  alias bench='hyperfine --warmup 3'
+  alias benchs='hyperfine --shell=zsh'
+  alias bench-zsh='hyperfine "zsh -i -c exit"'
+fi
+
+# ===== SD (SED REPLACEMENT) =====
+if command -v sd > /dev/null; then
+  alias sed='sd'
+  replace()     { sd "$1" "$2" "$3"; }
+  replace-all() { fd -t f -x sd "$1" "$2"; }
+fi
+
+# ===== XH (HTTP CLIENT) =====
+if command -v xh > /dev/null; then
+  alias http='xh'
+  alias https='xh --https'
+  alias httpj='xh --json'
+  alias httpd='xh --download'
+  get()  { xh GET "$@"; }
+  post() { xh POST "$@"; }
+fi
+
+# ===== GITUI (GIT TUI) =====
+if command -v gitui > /dev/null; then
+  alias gu='gitui'
+  alias gitu='gitui'
+fi
+
+# ===== BROOT =====
+if command -v broot > /dev/null; then
+  alias br='broot'
+  alias brt='broot --sizes'
+  source ~/.config/broot/launcher/bash/br 2>/dev/null
+fi
+
+# ===== CHOOSE (CUT/AWK REPLACEMENT) =====
+if command -v choose > /dev/null; then
+  alias cut='choose'
+  field() { choose "$1"; }
+fi
+
+# ===== WATCHEXEC (FILE WATCHER) =====
+if command -v watchexec > /dev/null; then
+  alias watch='watchexec'
+  watchrun() { watchexec -c -r "$@"; }
+  watchpy()  { watchexec -e py -c -r "$@"; }
+fi
+
+# ===== FNM (FAST NODE MANAGER) =====
+# FIX: removed duplicate fnm init that was at line ~968 — one block only
+if command -v fnm > /dev/null; then
+  eval "$(fnm env --use-on-cd)"
+  alias node-install='fnm install'
+  alias node-use='fnm use'
+  alias node-list='fnm list'
+fi
+
+# ===== GREX (REGEX GENERATOR) =====
+if command -v grex > /dev/null; then
+  regex() { grex "$@"; }
+fi
+
+# ===== SILICON (CODE SCREENSHOTS) =====
+if command -v silicon > /dev/null; then
+  screenshot() { silicon --theme "Catppuccin-mocha" --output "$1.png" "$1"; }
+fi
+
+# ===== BANDWHICH (NETWORK MONITOR) =====
+if command -v bandwhich > /dev/null; then
+  alias netmon='sudo bandwhich'
+fi
+
+# ===== ZSH OPTIONS =====
+setopt AUTO_CD
+setopt AUTO_PUSHD
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT
+setopt CDABLE_VARS
+
+setopt EXTENDED_GLOB
+setopt GLOB_DOTS
+setopt NO_NOMATCH
+setopt NUMERIC_GLOB_SORT
+
+setopt COMPLETE_IN_WORD
+setopt ALWAYS_TO_END
+setopt AUTO_MENU
+setopt LIST_PACKED
+
+setopt INTERACTIVE_COMMENTS
+setopt NO_BEEP
+setopt NO_FLOW_CONTROL
+setopt MULTIOS
+setopt RM_STAR_SILENT
+
 unsetopt CORRECT
 unsetopt CORRECT_ALL
 
-# ===== ENHANCED COMPLETION STYLING =====
-# Case-insensitive, partial-word, and substring matching
+# ===== COMPLETION STYLING =====
 zstyle ':completion:*' completer _extensions _complete _approximate
 zstyle ':completion:*' matcher-list \
   'm:{[:lower:][:upper:]-_}={[:upper:][:lower:]_-}' \
   'r:|[._-]=* r:|=*' \
   'l:|=* r:|=*'
-
-# Partial path completion: /u/lo/b → /usr/local/bin
 zstyle ':completion:*' list-suffixes
 zstyle ':completion:*' expand prefix suffix
-
-# Grouped completions with colored output
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
 zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
 zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
 zstyle ':completion:*' special-dirs true
-zstyle ':completion:*' menu no  # Let fzf-tab handle the menu if installed
+zstyle ':completion:*' menu no  # fzf-tab handles the menu
 
-# ===== ESSENTIAL ALIASES =====
-
-
-# Navigation shortcuts
+# ===== NAVIGATION ALIASES =====
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -293,7 +529,7 @@ alias .....='cd ../../../..'
 alias ~='cd ~'
 alias -- -='cd -'
 
-# Essential shortcuts
+# ===== ESSENTIAL ALIASES =====
 alias mkdir='mkdir -pv'
 alias h='history'
 alias j='jobs -l'
@@ -303,7 +539,7 @@ alias now='date +"%T"'
 alias nowdate='date +"%Y-%m-%d"'
 alias week='date +%V'
 
-# Enhanced Git aliases
+# ===== GIT ALIASES =====
 alias gs='git status -sb'
 alias ga='git add'
 alias gaa='git add --all'
@@ -311,8 +547,6 @@ alias gc='git commit -v'
 alias gp='git push'
 alias gpf='git push --force-with-lease'
 alias gl='git log --graph --pretty=format:"%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset" --abbrev-commit'
-alias gd='git diff'
-alias gds='git diff --staged'
 alias gco='git checkout'
 alias gcb='git checkout -b'
 alias gb='git branch -vv'
@@ -324,21 +558,22 @@ alias gst='git stash'
 alias gstp='git stash pop'
 alias gprune='git remote prune origin'
 
-# System info
+# ===== SYSTEM ALIASES =====
 alias df='df -H'
-alias du='du -ch'
-alias top='htop 2>/dev/null || top'
 
 # ===== USEFUL FUNCTIONS =====
-# Unalias conflicting aliases from plugins
+
+# Unalias anything that would conflict with custom cd
 unalias z 2>/dev/null
 unalias cd 2>/dev/null
 
-unalias z 2>/dev/null
-# Smarter cd: if target is a file, cd to its directory
+# FIX: removed alias cd='z' (was line 194) — conflicts with this function
+# Smarter cd: if target is a file, cd to its directory; otherwise use zoxide
 cd() {
   if [[ -f "$1" ]]; then
     builtin cd "$(dirname "$1")"
+  elif command -v z > /dev/null; then
+    z "$@" 2>/dev/null || builtin cd "$@"
   else
     builtin cd "$@"
   fi
@@ -357,10 +592,7 @@ mkcd() {
 
 # Enhanced directory picker with fzf
 fcd() {
-  if ! command -v fzf > /dev/null; then
-    echo "fzf not installed" >&2; return 1
-  fi
-  
+  if ! command -v fzf > /dev/null; then echo "fzf not installed" >&2; return 1; fi
   local dir
   if command -v fd > /dev/null; then
     dir=$(fd --type d ${1:-.} 2>/dev/null | fzf \
@@ -374,19 +606,14 @@ fcd() {
 
 # Enhanced git branch switcher with preview
 fbr() {
-  if ! command -v fzf > /dev/null; then
-    echo "fzf not installed" >&2; return 1
-  fi
-  
+  if ! command -v fzf > /dev/null; then echo "fzf not installed" >&2; return 1; fi
   git rev-parse HEAD > /dev/null 2>&1 || { echo "Not in git repo" >&2; return 1; }
-  
   local branches branch
   branches=$(git branch --all --color=always --sort=-committerdate | grep -v HEAD)
   branch=$(echo "$branches" |
     fzf --ansi --preview 'git log -n 10 --color=always --oneline --graph $(sed "s/.* //" <<< {})' \
     --preview-window=right:60% |
     sed "s/.* //" | sed "s#remotes/[^/]*/##")
-  
   [[ -n "$branch" ]] && git checkout "$branch"
 }
 
@@ -394,14 +621,11 @@ fbr() {
 unalias gcmsg 2>/dev/null
 gcmsg() {
   git diff --cached --quiet && { echo "No staged changes"; return 1; }
-  
   local files_changed=$(git diff --cached --name-only | wc -l | tr -d ' ')
   local stats=$(git diff --cached --stat 2>/dev/null | tail -1)
   local insertions=$(echo "$stats" | grep -o '[0-9]* insertion' | awk '{print $1}')
   local deletions=$(echo "$stats" | grep -o '[0-9]* deletion' | awk '{print $1}')
-  
   echo "Changes: $files_changed files, +${insertions:-0}/-${deletions:-0} lines"
-  
   local msg
   if [[ $files_changed -eq 1 ]]; then
     local filename=$(git diff --cached --name-only | head -1)
@@ -409,7 +633,6 @@ gcmsg() {
   else
     msg="Update $files_changed files"
   fi
-  
   echo "Suggested: $msg"
   read "user_msg?Enter message (or press Enter for suggestion): "
   git commit -m "${user_msg:-$msg}"
@@ -417,10 +640,7 @@ gcmsg() {
 
 # Enhanced history search with fzf
 hist() {
-  if ! command -v fzf > /dev/null; then
-    echo "fzf not installed" >&2; return 1
-  fi
-  
+  if ! command -v fzf > /dev/null; then echo "fzf not installed" >&2; return 1; fi
   local selected
   selected=$(fc -rl 1 | fzf --tac --no-sort \
     --preview 'echo {}' \
@@ -433,26 +653,22 @@ hist() {
 # Git log search
 unalias glog 2>/dev/null
 glog() {
-  if ! command -v fzf > /dev/null; then
-    echo "fzf not installed" >&2; return 1
-  fi
-  
+  if ! command -v fzf > /dev/null; then echo "fzf not installed" >&2; return 1; fi
   git log --oneline --color=always |
     fzf --ansi --preview 'git show --color=always {1}' \
     --preview-window=right:60% \
     --bind 'enter:execute(git show {1})'
 }
 
-# Quick notes function
+# Quick notes
 note() {
   local notes_dir="$HOME/notes"
   [[ ! -d "$notes_dir" ]] && mkdir -p "$notes_dir"
-  
   if [[ -n "$1" ]]; then
     echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" >> "$notes_dir/quick-notes.md"
     echo "Note saved!"
   else
-    ${EDITOR:-vim} "$notes_dir/quick-notes.md"
+    ${EDITOR:-nvim} "$notes_dir/quick-notes.md"
   fi
 }
 
@@ -460,18 +676,18 @@ note() {
 extract() {
   if [ -f "$1" ]; then
     case "$1" in
-      *.tar.bz2)   tar xjf "$1"     ;;
-      *.tar.gz)    tar xzf "$1"     ;;
-      *.bz2)       bunzip2 "$1"     ;;
-      *.rar)       unrar e "$1"     ;;
-      *.gz)        gunzip "$1"      ;;
-      *.tar)       tar xf "$1"      ;;
-      *.tbz2)      tar xjf "$1"     ;;
-      *.tgz)       tar xzf "$1"     ;;
-      *.zip)       unzip "$1"       ;;
-      *.Z)         uncompress "$1"  ;;
-      *.7z)        7z x "$1"        ;;
-      *)     echo "'$1' cannot be extracted via extract()" ;;
+      *.tar.bz2)   tar xjf "$1"    ;;
+      *.tar.gz)    tar xzf "$1"    ;;
+      *.bz2)       bunzip2 "$1"    ;;
+      *.rar)       unrar e "$1"    ;;
+      *.gz)        gunzip "$1"     ;;
+      *.tar)       tar xf "$1"     ;;
+      *.tbz2)      tar xjf "$1"    ;;
+      *.tgz)       tar xzf "$1"    ;;
+      *.zip)       unzip "$1"      ;;
+      *.Z)         uncompress "$1" ;;
+      *.7z)        7z x "$1"       ;;
+      *)           echo "'$1' cannot be extracted via extract()" ;;
     esac
   else
     echo "'$1' is not a valid file"
@@ -490,42 +706,180 @@ if command -v yazi > /dev/null; then
   }
 fi
 
-# ===== KEY BINDINGS FOR MACOS =====
+# ===== RUST-POWERED COMBO FUNCTIONS =====
+
+# Smart search and edit
+search-edit() {
+  local file line
+  read -r file line <<< $(
+    rg --line-number --no-heading --color=always "$@" |
+    fzf --ansi \
+      --delimiter ':' \
+      --preview 'bat --color=always {1} --highlight-line {2}' \
+      --preview-window '+{2}/2' |
+    awk -F: '{print $1, $2}'
+  )
+  [[ -n "$file" ]] && ${EDITOR:-nvim} "+$line" "$file"
+}
+alias se='search-edit'
+
+# Find file and preview
+find-preview() {
+  fd --type f "$@" |
+    fzf --preview 'bat --color=always {}' \
+        --bind 'enter:execute(${EDITOR:-nvim} {})'
+}
+alias fp='find-preview'
+
+# Git log with preview
+git-log-preview() {
+  git log --oneline --color=always --decorate |
+    fzf --ansi \
+      --preview 'git show --color=always {1} | delta' \
+      --bind 'enter:execute(git show {1} | delta | less -R)'
+}
+alias glp='git-log-preview'
+
+# Process killer
+kill-process() {
+  procs |
+    fzf --header-lines=1 \
+        --preview 'echo {}' \
+        --preview-window down:3:wrap |
+    awk '{print $1}' |
+    xargs -r kill -9
+}
+alias kp='kill-process'
+
+# Directory size analysis
+dir-analysis() {
+  dust -d 3 -r "${1:-.}" |
+    fzf --ansi --preview 'eza --tree --level=2 --color=always $(echo {} | awk "{print \$NF}")'
+}
+alias da='dir-analysis'
+
+# Code statistics
+code-stats() {
+  tokei --sort lines "${1:-.}" | bat -l yaml
+}
+alias cs='code-stats'
+
+# Benchmark comparison
+compare-commands() {
+  hyperfine --warmup 3 "$@" | bat -l markdown
+}
+alias cmp='compare-commands'
+
+# Network connections
+net-connections() {
+  procs | rg -i 'tcp|udp' | fzf --header-lines=1
+}
+alias nc='net-connections'
+
+# Git file history
+git-file-history() {
+  git log --follow --oneline --color=always -- "$1" |
+    fzf --ansi \
+      --preview "git show --color=always {1}:$1 | bat --color=always" \
+      --bind 'enter:execute(git show {1}:'"$1"' | bat | less -R)'
+}
+alias gfh='git-file-history'
+
+# Search in history and execute
+history-exec() {
+  local cmd
+  cmd=$(fc -rl 1 |
+    fzf --tac --no-sort \
+      --preview 'echo {}' \
+      --bind 'enter:accept' |
+    sed 's/^ *[0-9]* *//')
+  [[ -n "$cmd" ]] && eval "$cmd"
+}
+alias he='history-exec'
+
+# Find large files
+find-large() {
+  fd --type f -x dust -s {} |
+    sort -rh |
+    head -n "${1:-20}" |
+    bat -l tsv
+}
+alias fl='find-large'
+
+# Find recent files with preview
+find-recent() {
+  fd --type f --changed-within "${1:-7d}" |
+    fzf --preview 'bat --color=always {}' \
+        --bind 'enter:execute(${EDITOR:-nvim} {})'
+}
+alias fr='find-recent'
+
+# Interactive git add
+git-add-interactive() {
+  git status --short |
+    fzf --multi \
+      --preview 'git diff --color=always {2} | delta' \
+      --bind 'ctrl-a:select-all' |
+    awk '{print $2}' |
+    xargs -r git add
+}
+alias gai='git-add-interactive'
+
+# FIX: renamed from 'ps' alias — was colliding with alias ps='procs'
+# project-stats() is now accessible as pstat
+project-stats() {
+  echo "📊 Project Statistics\n"
+  echo "Code Lines:"
+  tokei --sort lines
+  echo "\n📁 Disk Usage:"
+  dust -d 1
+  echo "\n🗂️  File Types:"
+  fd --type f | choose -f '.' -1 | sort | uniq -c | sort -rn | head -10
+}
+alias pstat='project-stats'
+
+# Benchmark all tools
+benchmark-tools() {
+  echo "🏎️  Performance Comparison\n"
+  echo "=== LS vs EZA ==="
+  hyperfine --warmup 3 'ls -la /usr/bin' 'eza -la /usr/bin'
+  echo "\n=== FIND vs FD ==="
+  hyperfine --warmup 3 'find . -name "*.py"' 'fd -e py'
+  echo "\n=== GREP vs RIPGREP ==="
+  hyperfine --warmup 3 'grep -r "import" .' 'rg "import"'
+  echo "\n=== CAT vs BAT ==="
+  hyperfine --warmup 3 'cat ~/.zshrc' 'bat --paging=never ~/.zshrc'
+}
+
+# ===== KEY BINDINGS =====
 bindkey -e  # Emacs mode
 
-# Word navigation (works in iTerm2 with Option→Esc+)
-bindkey '^[[1;3D' backward-word      # Alt+Left
-bindkey '^[[1;3C' forward-word       # Alt+Right
-bindkey '\e\e[D'  backward-word      # macOS Terminal.app
-bindkey '\e\e[C'  forward-word       # macOS Terminal.app
+# Word navigation
+bindkey '^[[1;3D' backward-word
+bindkey '^[[1;3C' forward-word
+bindkey '\e\e[D'  backward-word
+bindkey '\e\e[C'  forward-word
 
-# Home/End/Delete
+# Home / End / Delete
 bindkey '^[[H' beginning-of-line
 bindkey '^[[F' end-of-line
 bindkey '^[[3~' delete-char
 
 # Word delete
-bindkey '^[d'  kill-word             # Alt+D: forward
-bindkey '^[^?' backward-kill-word    # Alt+Backspace: backward
+bindkey '^[d'  kill-word
+bindkey '^[^?' backward-kill-word
 
-# History: type a prefix, then use arrows to search
-bindkey '^[[A' history-beginning-search-backward
-bindkey '^[[B' history-beginning-search-forward
-
-# Edit command in $EDITOR with Ctrl+X Ctrl+E
+# Edit command in $EDITOR
 autoload -Uz edit-command-line
 zle -N edit-command-line
 bindkey '^X^E' edit-command-line
 
 # Accept autosuggestion
-bindkey '^ ' autosuggest-accept      # Ctrl+Space
+bindkey '^ ' autosuggest-accept   # Ctrl+Space
 
-# ===== PYTHON & NODE.JS DEVELOPMENT =====
-
-# Python: alias for quick execution
+# ===== PYTHON DEVELOPMENT =====
 alias py='python'
 
-# Auto-activate virtual environment if present
 auto_venv() {
   if [[ -f "venv/bin/activate" ]]; then
     echo "🌱 Virtual environment detected, activating..."
@@ -536,62 +890,49 @@ auto_venv() {
   fi
 }
 
-# Auto Python execution handler
 command_not_found_handler() {
   local cmd="$1"
-  
-  # Check if the command ends with .py or has a .py file
   if [[ "$cmd" == *.py ]]; then
     if [[ -f "$cmd" ]]; then
       echo "🐍 Auto-executing: $cmd"
-      python "$cmd" "${@:2}"
-      return $?
+      python "$cmd" "${@:2}"; return $?
     elif [[ -f "${cmd}.py" ]]; then
       echo "🐍 Auto-executing: ${cmd}.py"
-      python "${cmd}.py" "${@:2}"
-      return $?
+      python "${cmd}.py" "${@:2}"; return $?
     fi
   elif [[ -f "${cmd}.py" ]]; then
     echo "🐍 Auto-executing: ${cmd}.py"
-    python "${cmd}.py" "${@:2}"
-    return $?
+    python "${cmd}.py" "${@:2}"; return $?
   fi
-  
   echo "zsh: command not found: $cmd" >&2
   return 127
 }
 
-# ===== FAST NODE VERSION MANAGER (FNM) =====
-# Replaces nvm with ~4ms startup cost instead of ~800ms
-if command -v fnm > /dev/null; then
-  eval "$(fnm env --use-on-cd)"
-fi
-
 # ===== MISE (UNIVERSAL VERSION MANAGER) =====
-# Alternative to fnm+uv for polyglot developers
 # Uncomment if you prefer mise over fnm/uv:
-# if command -v mise > /dev/null; then
-#   eval "$(mise activate zsh)"
-# fi
+# if command -v mise > /dev/null; then eval "$(mise activate zsh)"; fi
 
-# ===== UV COMPLETIONS (OPTIONAL) =====
-# uv requires zero initialization, but you can add completions:
+# ===== UV COMPLETIONS =====
 if command -v uv > /dev/null; then
   eval "$(uv generate-shell-completion zsh)" 2>/dev/null
 fi
 
 # ===== ATUIN (MODERN SHELL HISTORY) =====
-# SQLite-backed, fuzzy-searchable history with metadata
+# FIX: McFly block removed entirely — Atuin takes sole ownership of Ctrl+R
+# Atuin config at ~/.config/atuin/config.toml:
+#   [behavior]
+#   filter_mode_shell_up_arrow = "directory"
+#   filter_mode = "global"
+#   search_mode = "fuzzy"
+#   [sync]
+#   records = false
 if command -v atuin > /dev/null; then
   eval "$(atuin init zsh)"
-  # Uncomment to disable up-arrow override:
-  # eval "$(atuin init zsh --disable-up-arrow)"
 fi
 
 # ===== LAZY-LOADED TOOLS =====
-# Only load these when explicitly called (saves startup time)
 
-# Lazy-load nvm (if you still need it)
+# Lazy-load nvm
 if [[ -d "$HOME/.nvm" ]]; then
   export NVM_DIR="$HOME/.nvm"
   lazy_load_nvm() {
@@ -604,7 +945,7 @@ if [[ -d "$HOME/.nvm" ]]; then
   npx()  { lazy_load_nvm; npx "$@"; }
 fi
 
-# Lazy-load conda (if you still need it)
+# Lazy-load conda
 if [[ -d "/opt/homebrew/Caskroom/miniconda/base" ]]; then
   conda() {
     unset -f conda
@@ -624,13 +965,12 @@ if [[ -d "/opt/homebrew/Caskroom/miniconda/base" ]]; then
 fi
 
 # ===== FINAL CUSTOMIZATIONS =====
-# Load machine-specific settings if they exist
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
 
 # Load p10k configuration
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# Override p10k gap settings AFTER loading the config
+# Override p10k gap settings after loading config
 if [[ -n $POWERLEVEL9K_VERSION ]]; then
   typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_CHAR=''
   typeset -g POWERLEVEL9K_LEFT_PROMPT_LAST_SEGMENT_END_SYMBOL=''
@@ -638,19 +978,26 @@ if [[ -n $POWERLEVEL9K_VERSION ]]; then
   p10k reload 2>/dev/null
 fi
 
-# Welcome message (simple for performance)
-if [[ -o interactive ]]; then
-  echo "✨ Welcome back, $(whoami)! Today is $(date '+%A, %B %d')"
+# ===== GHOSTTY CURSOR FIX =====
+# Restores block cursor after Powerlevel10k overrides it to a beam
+# Must be last — after p10k loads
+if [[ "$TERM_PROGRAM" == "ghostty" ]]; then
+  _fix_cursor() { echo -ne '\e[2 q'; }
+  precmd_functions+=(_fix_cursor)
+  zle-line-init() { echo -ne '\e[2 q'; }
+  zle -N zle-line-init
 fi
 
-# Claude Screenshot Tool
-alias claude-screenshot='/Users/kpatel/.claude_screenshot/launch_stealth.sh'
-
-# Added by Antigravity
+# ===== ADDITIONAL PATHS =====
 export PATH="/Users/kpatel/.antigravity/antigravity/bin:$PATH"
 
-# ===== COMPILE ZCOMPDUMP FOR FASTER LOADING =====
-# Run this in background to compile the completion dump
+# ===== CLAUDE SCREENSHOT TOOL =====
+alias claude-screenshot='/Users/kpatel/.claude_screenshot/launch_stealth.sh'
+
+# ===== OPENCLAW COMPLETION =====
+source "/Users/kpatel/.openclaw/completions/openclaw.zsh"
+
+# ===== BACKGROUND: COMPILE ZCOMPDUMP =====
 {
   zcompdump="${ZDOTDIR:-$HOME}/.zcompdump"
   if [[ -s "$zcompdump" && (! -s "${zcompdump}.zwc" || "$zcompdump" -nt "${zcompdump}.zwc") ]]; then
@@ -658,652 +1005,7 @@ export PATH="/Users/kpatel/.antigravity/antigravity/bin:$PATH"
   fi
 } &!
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-#!/usr/bin/env zsh
-# =====================================================
-# ENHANCED ZSH CONFIGURATION
-# Optimized for performance, functionality, and maintainability
-# =====================================================
-
-# ===== PERFORMANCE SETTINGS (MUST BE FIRST) =====
-# These settings significantly improve startup time
-DISABLE_AUTO_UPDATE="true"
-DISABLE_MAGIC_FUNCTIONS="true"
-DISABLE_UNTRACKED_FILES_DIRTY="true"
-ZLE_RPROMPT_INDENT=0
-
-if [[ -n "${TERM_PROGRAM}" ]]; then
-  case "${TERM_PROGRAM}" in
-    "vscode") POWERLEVEL9K_INSTANT_PROMPT=off ;;
-    "iTerm.app") POWERLEVEL9K_TERM_SHELL_INTEGRATION=true ;;
-  esac
-fi
-
-# =====================================================
-# ENHANCED ZSH CONFIGURATION
-# Optimized for performance, functionality, and maintainability
-# =====================================================
-
-# ===== PERFORMANCE SETTINGS (MUST BE FIRST) =====
-# These settings significantly improve startup time
-DISABLE_AUTO_UPDATE="true"
-DISABLE_MAGIC_FUNCTIONS="true"
-DISABLE_UNTRACKED_FILES_DIRTY="true"
-ZLE_RPROMPT_INDENT=0
-
-if [[ -n "${TERM_PROGRAM}" ]]; then
-  case "${TERM_PROGRAM}" in
-    "vscode") POWERLEVEL9K_INSTANT_PROMPT=off ;;
-    "iTerm.app") POWERLEVEL9K_TERM_SHELL_INTEGRATION=true ;;
-  esac
-fi
-
-# Path to your Oh My Zsh installation
-export ZSH="$HOME/.oh-my-zsh"
-
-# ===== INSTANT PROMPT (MUST BE EARLY) =====
-# Enable Powerlevel10k instant prompt - must be before any console output
-typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-# ===== THEME CONFIGURATION =====
-ZSH_THEME="powerlevel10k/powerlevel10k"
-
-# Powerlevel10k performance settings
-POWERLEVEL9K_VCS_MAX_SYNC_LATENCY_SECONDS=0.1
-POWERLEVEL9K_VCS_MAX_INDEX_SIZE_DIRTY=4096
-POWERLEVEL9K_VCS_STAGED_MAX_NUM=10
-POWERLEVEL9K_VCS_UNSTAGED_MAX_NUM=10
-
-# If you have font issues, uncomment this line:
-# POWERLEVEL9K_MODE='compatible'
-# Disable gap filler to prevent width issues
-
-# ===== OH MY ZSH SETTINGS =====
-# Case-insensitive completion
-CASE_SENSITIVE="false"
-HYPHEN_INSENSITIVE="true"
-
-# Auto-update behavior
-zstyle ':omz:update' mode disabled  # We disabled auto-update for performance
-
-# Enable command auto-correction
-ENABLE_CORRECTION="true"
-COMPLETION_WAITING_DOTS="true"
-
-# ===== OPTIMIZED HISTORY CONFIGURATION =====
-HISTFILE="$HOME/.zsh_history"
-HISTSIZE=1000000
-SAVEHIST=1000000
-HIST_STAMPS="yyyy-mm-dd"
-
-# Robust history settings
-setopt EXTENDED_HISTORY          # Save timestamp and duration
-setopt INC_APPEND_HISTORY        # Write immediately
-setopt SHARE_HISTORY             # Share between sessions
-setopt HIST_EXPIRE_DUPS_FIRST    # Expire duplicates first
-setopt HIST_IGNORE_DUPS          # Don't record immediate duplicates
-setopt HIST_IGNORE_ALL_DUPS      # Delete old recorded duplicates
-setopt HIST_FIND_NO_DUPS         # Don't show duplicates in search
-setopt HIST_IGNORE_SPACE         # Don't record commands starting with space
-setopt HIST_SAVE_NO_DUPS         # Don't write duplicates
-setopt HIST_REDUCE_BLANKS        # Remove superfluous blanks
-setopt HIST_VERIFY               # Don't execute immediately on expansion
-
-# ===== PLUGIN CONFIGURATION =====
-# Note: zsh-syntax-highlighting must be last!
-plugins=(
-  git                    # Git aliases and functions
-  z                      # Jump to frecent directories
-  fzf                    # Fuzzy finder integration
-  docker                 # Docker completion
-  kubectl                # Kubernetes completion
-  pip                    # Python pip completion
-  npm                    # npm completion
-  sudo                   # Press ESC twice to add sudo
-  copypath               # Copy current path to clipboard
-  copyfile               # Copy file contents to clipboard
-  dirhistory             # Navigate directory history with ALT-LEFT/RIGHT
-  jsontools              # JSON pretty printing
-  macos                  # macOS specific utilities
-  web-search             # Search web from terminal
-  colored-man-pages      # Colorful man pages
-  command-not-found      # Suggest package to install
-  extract                # Extract any archive with `extract`
-  history-substring-search # Search history with up/down arrows
-  zsh-autosuggestions    # Fish-like autosuggestions
-  zsh-syntax-highlighting # MUST BE LAST - Fish-like syntax highlighting
-)
-
-# ===== ZSH AUTOSUGGESTIONS OPTIMIZATION =====
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#3a3a3a"
-ZSH_AUTOSUGGEST_STRATEGY=(history completion)
-ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
-ZSH_AUTOSUGGEST_USE_ASYNC=true
-ZSH_AUTOSUGGEST_MANUAL_REBIND=1
-ZSH_AUTOSUGGEST_COMPLETION_IGNORE="git *"
-
-# Skip compaudit security check for faster loading
-export ZSH_DISABLE_COMPFIX=true
-
-# ===== SMART COMPLETION CONFIGURATION =====
-# Optimized completion loading
-autoload -Uz compinit
-if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
-  compinit
-else
-  compinit -C
-fi
-
-# Compile zsh files for faster loading
-{
-  setopt LOCAL_OPTIONS EXTENDED_GLOB
-  autoload -U zrecompile
-  local f
-  for f in ~/.zcompdump ~/.zshrc ${ZDOTDIR:-~}/.zshrc; do
-    [[ -f "$f" && ( ! -f "${f}.zwc" || "$f" -nt "${f}.zwc" ) ]] && zrecompile -pq "$f"
-  done
-}
-
-autoload -Uz bashcompinit && bashcompinit
-
-# Enhanced completion options
-setopt COMPLETE_IN_WORD    # Complete from both ends
-setopt ALWAYS_TO_END       # Move cursor to end
-setopt PATH_DIRS           # Perform path search on commands with /
-setopt AUTO_MENU           # Show completion menu on successive tab
-setopt AUTO_LIST           # Automatically list choices
-setopt AUTO_PARAM_SLASH    # Add trailing slash for directories
-setopt EXTENDED_GLOB       # Extended globbing
-setopt NO_CASE_GLOB        # Case insensitive globbing
-setopt NUMERIC_GLOB_SORT   # Sort filenames numerically
-setopt NO_BEEP             # No beep on error
-setopt MENU_COMPLETE       # Auto highlight first element
-setopt INTERACTIVE_COMMENTS # Allow comments in interactive shells (prevents # from being treated as glob pattern)
-
-# Advanced completion styling
-zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
-zstyle ':completion:*' special-dirs true
-zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
-zstyle ':completion:*' menu select
-zstyle ':completion:*' group-name ''
-zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
-zstyle ':completion:*:messages' format '%F{purple}-- %d --%f'
-zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
-zstyle ':completion:*' use-cache yes
-zstyle ':completion:*' cache-path "$HOME/.cache/zsh/completion-cache"
-
-# Better kill completion
-zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
-zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
-
-# SSH/SCP/RSYNC host completion
-zstyle ':completion:*:(ssh|scp|rsync):*' tag-order 'hosts:-host:host hosts:-domain:domain hosts:-ipaddr:ip\ address *'
-zstyle ':completion:*:(ssh|scp|rsync):*' group-order users files all-files hosts-domain hosts-host hosts-ipaddr
-
-# Source Oh My Zsh
-source $ZSH/oh-my-zsh.sh
-
-# ===== PATH CONFIGURATION =====
-# Deduplicate PATH entries
-typeset -U path
-path=(
-  /Users/kpatel/.codeium/windsurf/bin
-  /opt/homebrew/opt/openjdk/bin
-  /opt/homebrew/bin
-  /usr/local/bin
-  $HOME/.local/bin
-  $HOME/bin
-  $path
-)
-export PATH
-
-# ===== ENVIRONMENT VARIABLES =====
-export LANG=en_US.UTF-8
-export EDITOR='nvim'
-export VISUAL="$EDITOR"
-export LESS='-R -F -g -i -J -M -W -x4'
-export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
-export PYTORCH_ENABLE_MPS_FALLBACK=1
-
-# ===== LS COLORS =====
-# Enable colors for ls
-export CLICOLOR=1
-# Set custom colors for different file types
-export LSCOLORS=exfxcxdxbxegedabagacad
-
-# ===== FZF CONFIGURATION =====
-# Better fzf defaults with preview support
-export FZF_DEFAULT_OPTS='
-  --height 40% --layout=reverse --border
-  --color=fg:#f8f8f2,bg:#282a36,hl:#bd93f9
-  --color=fg+:#f8f8f2,bg+:#44475a,hl+:#bd93f9
-  --color=info:#ffb86c,prompt:#50fa7b,pointer:#ff79c6
-  --color=marker:#ff79c6,spinner:#ffb86c,header:#6272a4
-  --bind="ctrl-/:toggle-preview"
-  --bind="ctrl-u:preview-half-page-up"
-  --bind="ctrl-d:preview-half-page-down"'
-
-# Use fd for better performance if available
-if command -v fd > /dev/null; then
-  export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
-  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-  export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
-
-  # Preview with bat if available
-  if command -v bat > /dev/null; then
-    export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :500 {}'"
-    export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
-  fi
-fi
-
-# ===== SMART DIRECTORY NAVIGATION =====
-setopt AUTO_CD              # Auto cd without typing cd
-setopt AUTO_PUSHD           # Push current directory on stack
-setopt PUSHD_IGNORE_DUPS    # No duplicates in stack
-setopt PUSHD_SILENT         # No directory stack after pushd/popd
-setopt CDABLE_VARS          # Change directory to a path in variable
-
-# Disable spelling correction
-unsetopt correct
-unsetopt correct_all
-
-# ===== ENHANCED ALIASES =====
-# Better ls
-alias ls='ls --color=auto'
-alias ll='ls -alFh'
-alias la='ls -A'
-alias l='ls -CF'
-alias lt='ls -alt'
-alias ltr='ls -altr'
-alias lsize='ls -lhSr'  # Sort by size
-
-# Navigation
-alias ..='cd ..'
-alias ...='cd ../..'
-alias ....='cd ../../..'
-alias .....='cd ../../../..'
-alias ~='cd ~'
-alias -- -='cd -'
-
-# Safety nets
-alias rm='rm -i'
-alias cp='cp -i'
-alias mv='mv -i'
-alias mkdir='mkdir -pv'
-
-# Shortcuts
-alias h='history'
-alias j='jobs -l'
-alias which='type -a'
-alias path='echo -e ${PATH//:/\n}'
-alias now='date +"%T"'
-alias nowdate='date +"%Y-%m-%d"'
-alias week='date +%V'
-
-# Enhanced Git aliases
-alias gs='git status -sb'
-alias ga='git add'
-alias gaa='git add --all'
-alias gc='git commit -v'
-alias gp='git push'
-alias gpf='git push --force-with-lease'
-alias gl='git log --graph --pretty=format:"%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset" --abbrev-commit'
-alias gd='git diff'
-alias gds='git diff --staged'
-alias gco='git checkout'
-alias gcb='git checkout -b'
-alias gb='git branch -vv'
-alias gf='git fetch --all --prune'
-alias gm='git merge'
-alias gcp='git cherry-pick'
-alias grb='git rebase'
-alias gst='git stash'
-alias gstp='git stash pop'
-alias gprune='git remote prune origin'
-
-# System info
-alias df='df -H'
-alias du='du -ch'
-alias top='htop 2>/dev/null || top'
-alias free='free -h'
-
-# ===== ENHANCED FUNCTIONS =====
-
-# Smarter cd: if target is a file, cd to its directory
-cd() {
-  if [[ -f "$1" ]]; then
-    builtin cd "$(dirname "$1")"
-  else
-    builtin cd "$@"
-  fi
-}
-
-# Make directory and cd into it with error handling
-mkcd() {
-  [[ -z "$1" ]] && { echo "Usage: mkcd <directory>" >&2; return 1; }
-
-  if [[ -d "$1" ]]; then
-    echo "Directory exists, changing to it..."
-    cd "$1"
-  else
-    mkdir -p "$1" && cd "$1" && echo "Created and changed to: $(pwd)"
-  fi
-}
-
-# Enhanced directory picker with preview
-fcd() {
-  local dir
-  dir=$(fd --type d ${1:-.} 2>/dev/null | fzf \
-    --preview 'tree -C -L 2 {} | head -200' \
-    --preview-window=right:50% \
-    --header="Navigate to directory") && cd "$dir"
-}
-
-# Enhanced git branch switcher with preview
-fbr() {
-  git rev-parse HEAD > /dev/null 2>&1 || { echo "Not in git repo" >&2; return 1; }
-
-  local branches branch
-  branches=$(git branch --all --color=always --sort=-committerdate | grep -v HEAD)
-  branch=$(echo "$branches" |
-    fzf --ansi --preview 'git log -n 10 --color=always --oneline --graph $(sed "s/.* //" <<< {})' \
-    --preview-window=right:60% |
-    sed "s/.* //" | sed "s#remotes/[^/]*/##")
-
-  [[ -n "$branch" ]] && git checkout "$branch"
-}
-
-# Smart commit with analysis (unalias first to avoid conflict)
-unalias gcmsg 2>/dev/null
-gcmsg() {
-  git diff --cached --quiet && { echo "No staged changes"; return 1; }
-
-  local files_changed=$(git diff --cached --name-only | wc -l | tr -d ' ')
-  local stats=$(git diff --cached --stat 2>/dev/null | tail -1)
-  local insertions=$(echo "$stats" | grep -o '[0-9]* insertion' | awk '{print $1}')
-  local deletions=$(echo "$stats" | grep -o '[0-9]* deletion' | awk '{print $1}')
-
-  echo "Changes: $files_changed files, +${insertions:-0}/-${deletions:-0} lines"
-
-  local msg
-  if [[ $files_changed -eq 1 ]]; then
-    local filename=$(git diff --cached --name-only | head -1)
-    msg="Update $(basename "$filename")"
-  else
-    msg="Update $files_changed files"
-  fi
-
-  echo "Suggested: $msg"
-  read "user_msg?Enter message (or press Enter for suggestion): "
-  git commit -m "${user_msg:-$msg}"
-}
-
-# Enhanced history search with fzf
-hist() {
-  local selected
-  selected=$(fc -rl 1 | fzf --tac --no-sort \
-    --preview 'echo {}' \
-    --preview-window up:3:hidden:wrap \
-    --bind 'ctrl-/:toggle-preview' \
-    --header="Search history") &&
-  print -z "$(echo "$selected" | sed 's/^ *[0-9]* *//')"
-}
-
-# Git log search
-unalias glog 2>/dev/null # <-- FIX: Remove alias from git plugin to avoid conflict
-glog() {
-  git log --oneline --color=always |
-    fzf --ansi --preview 'git show --color=always {1}' \
-    --preview-window=right:60% \
-    --bind 'enter:execute(git show {1})'
-}
-
-# Directory bookmarks
-export BOOKMARKS_DIR="$HOME/.local/share/zsh/bookmarks"
-[[ ! -d "$BOOKMARKS_DIR" ]] && mkdir -p "$BOOKMARKS_DIR"
-
-bookmark() {
-  local name="${1:-$(basename "$PWD")}"
-  ln -sf "$PWD" "$BOOKMARKS_DIR/$name"
-  echo "Bookmarked $PWD as '$name'"
-}
-
-jump() {
-  local bookmark
-  if [[ -n "$1" ]]; then
-    [[ -L "$BOOKMARKS_DIR/$1" ]] && cd "$(readlink "$BOOKMARKS_DIR/$1")" || echo "Bookmark not found"
-  else
-    bookmark=$(find "$BOOKMARKS_DIR" -type l -printf '%f\n' 2>/dev/null | fzf --header="Jump to bookmark") &&
-    cd "$(readlink "$BOOKMARKS_DIR/$bookmark")"
-  fi
-}
-
-# Quick notes function
-note() {
-  local notes_dir="$HOME/notes"
-  [[ ! -d "$notes_dir" ]] && mkdir -p "$notes_dir"
-
-  if [[ -n "$1" ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" >> "$notes_dir/quick-notes.md"
-    echo "Note saved!"
-  else
-    ${EDITOR:-vim} "$notes_dir/quick-notes.md"
-  fi
-}
-
-# Extract any archive
-extract() {
-  if [ -f "$1" ]; then # <-- FIX: Quoted variable
-    case "$1" in # <-- FIX: Quoted variable
-      *.tar.bz2)   tar xjf "$1"     ;;
-      *.tar.gz)    tar xzf "$1"     ;;
-      *.bz2)       bunzip2 "$1"     ;;
-      *.rar)       unrar e "$1"     ;;
-      *.gz)        gunzip "$1"      ;;
-      *.tar)       tar xf "$1"      ;;
-      *.tbz2)      tar xjf "$1"     ;;
-      *.tgz)       tar xzf "$1"     ;;
-      *.zip)       unzip "$1"       ;;
-      *.Z)         uncompress "$1"  ;;
-      *.7z)        7z x "$1"        ;;
-      *)     echo "'$1' cannot be extracted via extract()" ;;
-    esac
-  else
-    echo "'$1' is not a valid file"
-  fi
-}
-
-
-# History maintenance
-hist-backup() {
-  local backup_dir="$HOME/.local/share/zsh/history-backups"
-  [[ ! -d "$backup_dir" ]] && mkdir -p "$backup_dir"
-  cp "$HISTFILE" "$backup_dir/zsh_history.$(date +%Y%m%d_%H%M%S)"
-  echo "History backed up"
-}
-
-hist-clean() {
-  local temp_hist="$HISTFILE.tmp"
-  tac "$HISTFILE" | awk '!seen[$0]++' | tac > "$temp_hist" &&
-  mv "$temp_hist" "$HISTFILE"
-  echo "History cleaned and deduplicated"
-}
-
-# ===== AUTO PYTHON EXECUTION =====
-# Automatically run .py files when typed in terminal
-command_not_found_handler() {
-  local cmd="$1"
-  
-  # Check if the command ends with .py
-  if [[ "$cmd" == *.py ]]; then
-    # Check if the file exists in current directory
-    if [[ -f "$cmd" ]]; then
-      echo "🐍 Auto-executing Python script: $cmd"
-      python "$cmd" "${@:2}"  # Pass any additional arguments
-      return $?
-    # Check if file exists with .py extension added
-    elif [[ -f "${cmd}.py" ]]; then
-      echo "🐍 Auto-executing Python script: ${cmd}.py"
-      python "${cmd}.py" "${@:2}"
-      return $?
-    fi
-  # Check if command without extension has a .py file
-  elif [[ -f "${cmd}.py" ]]; then
-    echo "🐍 Auto-executing Python script: ${cmd}.py"
-    python "${cmd}.py" "${@:2}"
-    return $?
-  fi
-  
-  # If not a Python file or file doesn't exist, show normal error
-  echo "zsh: command not found: $cmd" >&2
-  return 127
-}
-
-# Alternative: Create an alias for even faster execution (optional)
-alias py='python'
-
-# Make Python files executable and auto-run (advanced option)
-# Uncomment the following function if you want to make .py files executable automatically
-# make_executable() {
-#   if [[ "$1" == *.py ]] && [[ -f "$1" ]]; then
-#     chmod +x "$1"
-#     echo "Made $1 executable"
-#   fi
-# }
-
-# Auto-activate virtual environment if present (optional)
-auto_venv() {
-  if [[ -f "venv/bin/activate" ]]; then
-    echo "🌱 Virtual environment detected, activating..."
-    source venv/bin/activate
-  elif [[ -f ".venv/bin/activate" ]]; then
-    echo "🌱 Virtual environment detected, activating..."
-    source .venv/bin/activate
-  fi
-}
-
-# Auto-completion for Python files
-_python_files() {
-  local files
-  files=(*.py(N))
-  [[ ${#files} -gt 0 ]] && _describe 'python files' files
-}
-
-# Register completion for common Python script names
-compdef _python_files script
-compdef _python_files run
-
-# Helper function to execute multi-line commands with comments safely
-# Usage: multiline-cmd <<'EOF'
-#   # comment
-#   command1
-#   # another comment
-#   command2
-# EOF
-multiline-cmd() {
-  local cmd
-  while IFS= read -r line; do
-    # Skip lines that are only comments or whitespace
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "${line// }" ]] && continue
-    cmd+="$line"$'\n'
-  done
-  eval "$cmd"
-}
-
-# ===== KEY BINDINGS =====
-# History search with arrows
-bindkey '^[[A' history-substring-search-up
-bindkey '^[[B' history-substring-search-down
-
-# Ctrl+R for fzf history
-bindkey '^R' hist
-
-# Accept autosuggestion
-bindkey '^ ' autosuggest-accept      # Ctrl+Space
-bindkey '^[[F' autosuggest-accept    # End key
-
-# Alt+Enter to accept and execute
-bindkey '^[^M' autosuggest-execute
-
-# Home/End navigation
-bindkey '^[[H' beginning-of-line
-bindkey '^[[F' end-of-line
-
-# Delete key
-bindkey '^[[3~' delete-char
-
-# ===== LAZY LOADING SECTION =====
-# Load these only when needed for faster startup
-
-# Conda lazy initialization (moved after instant prompt)
-conda() {
-  unset -f conda
-  __conda_setup="$('/opt/homebrew/Caskroom/miniconda/base/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-  if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-  else
-    if [ -f "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh" ]; then
-      . "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh"
-    else
-      export PATH="/opt/homebrew/Caskroom/miniconda/base/bin:$PATH"
-    fi
-  fi
-  unset __conda_setup
-  conda "$@"
-}
-
-# NVM lazy loading
-nvm() {
-  unset -f nvm
-  export NVM_DIR="$HOME/.nvm"
-  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-  [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-  nvm "$@"
-}
-
-# Load fzf last (after instant prompt)
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-# ===== FINAL CUSTOMIZATIONS =====
-# Load machine-specific settings if they exist
-[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
-
-# Load p10k configuration
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-
-# Override p10k gap settings AFTER loading the config
-typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_CHAR=''
-typeset -g POWERLEVEL9K_LEFT_PROMPT_LAST_SEGMENT_END_SYMBOL=''
-typeset -g POWERLEVEL9K_RIGHT_PROMPT_FIRST_SEGMENT_START_SYMBOL=''
-
-# Force reload p10k with new settings
-if [[ -n $POWERLEVEL9K_VERSION ]]; then
-  p10k reload
-fi
-
-# Welcome message (keep it simple for performance)
+# Welcome message
 if [[ -o interactive ]]; then
-  echo "Welcome back, $(whoami)! Today is $(date '+%A, %B %d')"
+  echo "✨ Welcome back, $(whoami)! Today is $(date '+%A, %B %d')"
 fi
-# alias python="/opt/homebrew/bin/python3"
-
-# Auto-activate conda base environment
-# conda activate base
-export PATH="$PWD:$PATH"
-
