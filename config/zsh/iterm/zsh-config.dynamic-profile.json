@@ -1,0 +1,15 @@
+{
+  "Profiles": [
+    {
+      "Name": "zsh-config",
+      "Guid": "6F0A5C2E-7B1D-4C55-9E36-0A5C2E7B1D4C",
+      "Dynamic Profile Parent Name": "Default",
+      "Unlimited Scrollback": true,
+      "Silence Bell": true,
+      "Option Key Sends": 2,
+      "Mouse Reporting": true,
+      "Terminal Type": "xterm-256color",
+      "Badge Text": ""
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# Edit freely — the static bundle regenerates on next shell start.
+romkatv/powerlevel10k
+zsh-users/zsh-completions kind:fpath path:src
+
+# deferred, IN THIS ORDER: fzf-tab after compinit and before widget wrappers;
+# autosuggestions late; syntax highlighting after it; substring-search last.
+Aloxaf/fzf-tab kind:defer
+hlissner/zsh-autopair kind:defer
+olets/zsh-abbr kind:defer
+MichaelAquilina/zsh-you-should-use kind:defer
+MichaelAquilina/zsh-autoswitch-virtualenv kind:defer
+wfxr/forgit kind:defer
+ohmyzsh/ohmyzsh path:plugins/sudo kind:defer
+zsh-users/zsh-autosuggestions kind:defer
+zdharma-continuum/fast-syntax-highlighting kind:defer
+zsh-users/zsh-history-substring-search kind:defer

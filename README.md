@@ -1,5 +1,14 @@
 # Oh My Zsh Configuration
 
+> **Update:** this repo now also contains the full modular config with a private, on-device AI assistant (`?`, `??`, `???`), plus a macOS installer.
+>
+> - `config/zshrc`, `config/p10k.zsh`, `config/ghostty-config` → `~/.zshrc`, `~/.p10k.zsh`, Ghostty config
+> - `config/zsh/` → `~/.config/zsh/` (modules, agent code, MCP server, iTerm profile, launchd plist)
+> - `installer/` → `build.sh` builds a double-click `.dmg` installer (see `installer/src/README.txt`). The AI-memory vault ships as empty templates; no history, memory or model weights are included.
+>
+> The original standalone `.zshrc` below is unchanged.
+
+
 This repository contains a personalized and optimized `.zshrc` configuration for Zsh. It's designed to be a powerful, free alternative to modern terminals like Warp, by leveraging the flexibility of Zsh, Oh My Zsh, and the Powerlevel10k theme.
 
 ## Preview

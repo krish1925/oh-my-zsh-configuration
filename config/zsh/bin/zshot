@@ -1,0 +1,46 @@
+#!/bin/zsh -f
+# zshot [full|window|region] — screenshot → $ZSH_SHOTS/latest.png, prints the path.
+#
+# STANDALONE ON PURPOSE: called from Shortcuts.app / skhd / cron, none of which have your
+# interactive zshrc loaded — and, found by testing, not even a reliable $PATH (a zsh -i
+# spawned in a pty here came up without /bin on PATH at all). So every command below is an
+# absolute path, the same convention servers/mac.py uses for exactly this reason. No zsh
+# modules, no $ZC, no functions from ai.zsh. `shot` in ai.zsh just calls this.
+#
+# Needs Screen Recording permission for whatever app RUNS this (Terminal, Ghostty, or
+# Shortcuts' "Run Shell Script" helper) — macOS asks once, the first time.
+
+SHOTS=${ZSH_SHOTS:-${XDG_CACHE_HOME:-$HOME/.cache}/zsh/shots}
+KEEP_H=${ZSH_SHOT_KEEP_H:-24}
+/bin/mkdir -p "$SHOTS" || { echo "zshot: cannot create $SHOTS" >&2; exit 1 }
+
+ts=$(/bin/date +%s)
+f="$SHOTS/shot-$ts.png"
+
+case ${1:-region} in
+  full)   /usr/sbin/screencapture -x -t png "$f" ;;
+  window) /usr/sbin/screencapture -x -i -w -t png "$f" ;;   # click a window; Esc cancels
+  *)      /usr/sbin/screencapture -x -i -s -t png "$f" ;;   # drag a region; Esc cancels
+esac
+
+if [[ ! -s "$f" ]]; then
+  echo "zshot: cancelled" >&2
+  exit 1
+fi
+
+# vision tokens scale with pixels; 1344px keeps a Retina screenshot's detail readable
+# without paying for every native pixel. sips ships with macOS, no install needed.
+/usr/bin/sips -Z 1344 "$f" >/dev/null 2>&1
+
+/bin/ln -sf "$f" "$SHOTS/latest.png"
+
+# "pending" is how a screenshot taken OUTSIDE zsh (the global hotkey via Shortcuts.app,
+# which has no zsh state at all) reaches the next `??`: agent.py checks this file when no
+# --image was given, and only within ZAH_PENDING_MAX_S (default 120s) of this write, so a
+# shot from 20 minutes ago never silently attaches itself to an unrelated question.
+printf '%s\n' "$f" >| "$SHOTS/pending"
+
+# retention: delete shots older than KEEP_H hours (find's -mmin wants minutes)
+/usr/bin/find "$SHOTS" -name 'shot-*.png' -mmin "+$(( KEEP_H * 60 ))" -delete 2>/dev/null
+
+echo "$f"
