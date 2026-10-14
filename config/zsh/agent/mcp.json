@@ -1,0 +1,25 @@
+{
+  "_doc": [
+    "MCP servers the ?? agent may use. 'python' = the agent's own interpreter.",
+    "kind (per server, or per tool under 'tools'):",
+    "  private   - reads data about YOUR machine; results are remembered so they cannot be sent out",
+    "  untrusted - returns third-party text; quarantined + taints the session",
+    "  egress    - sends something out (URL / query) AND returns untrusted text; gated by provenance + leak checks",
+    "  sandbox   - executes code in an isolated, network-free, throwaway environment (servers/sandbox.py); ",
+    "              the ONLY exception to 'nothing executes' in this project, scoped to code that cannot touch",
+    "              the real machine or network at all — output treated like 'private' (leak-checked, no taint)",
+    "Only tools the server marks readOnlyHint=true, or that are listed under 'tools', are exposed — this is",
+    "how a write/execute-capable tool gets exposed on purpose (sandbox's run_python/run_shell below); every",
+    "other non-readOnlyHint tool stays hidden even if the server offers it.",
+    "Unknown servers default to kind 'untrusted'."
+  ],
+  "servers": {
+    "mac": { "command": "python", "args": ["servers/mac.py"], "kind": "private" },
+    "web": { "command": "python", "args": ["servers/web.py"], "kind": "untrusted",
+             "tools": { "web_search": "egress", "fetch_url": "egress" } },
+    "workspace": { "command": "python", "args": ["servers/workspace.py"], "kind": "private" },
+    "granted": { "command": "python", "args": ["servers/granted.py"], "kind": "private" },
+    "sandbox": { "command": "python", "args": ["servers/sandbox.py"], "kind": "private",
+                 "tools": { "run_python": "sandbox", "run_shell": "sandbox", "sandbox_status": "private" } }
+  }
+}

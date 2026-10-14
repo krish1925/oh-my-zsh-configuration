@@ -1,0 +1,719 @@
+#!/usr/bin/env zsh
+# =====================================================================
+#  ZSH v4 — adaptive shell · Ghostty
+#  black / semi-transparent background · 100% local by default
+#
+#  FILES
+#    ~/.zshrc                  core (this file): speed, colors, plugins, hooks
+#    ~/.config/zsh/ai.zsh      local LLM layer   (? / ?? / wtf / explain / aic)
+#    ~/.config/zsh/habits.zsh  learning engine   (habits, smart suggestions)
+#    ~/.config/zsh/tools.zsh   swiss-army knife  (zhelp lists everything)
+#    ~/.config/zsh/supershell.zsh  click-to-move, shift-select, watcher, ciw
+#    ~/.config/zsh/agents.zsh  background Claude Code jobs  (aj / ajs)
+#    ~/.config/zsh/mcp/        shell-history MCP server for Claude Code
+#    ~/.zshrc.local            your private overrides (never touched)
+#
+#  THE 6 THINGS TO REMEMBER
+#    ? <what you want>    Enter → AI writes the command into your prompt (never runs it)
+#    ?? <question>        Enter → AI answers in the terminal
+#    wtf                  explain why the last command failed (+ fix on the prompt)
+#    habits               turn what you actually type into shortcuts
+#    Ctrl+N               pick from ALL ranked suggestions, not just the inline one
+#    Ctrl+G               command palette: every function / alias / abbreviation
+#    zhelp                cheat sheet          (zsh-doctor = health check)
+#
+#  WHAT CHANGED vs v3 (Sept 2026)
+#    fixed  HIST_IGNORE_ALL_DUPS silently broke match_prev_cmd (sequence
+#           learning needs history order) → removed
+#    fixed  compinit -C fast path never ran: (#q…) needs EXTENDED_GLOB, which
+#           was set *after* it → full compinit + audit on every start
+#    fixed  `bindkey -e` ran after plugin bindings (lost in nested shells,
+#           because EDITOR=nvim makes zsh default to vi keymap)
+#    fixed  ls = eza --color=always → escape codes in pipes. now auto
+#    fixed  fzf sourced after atuin → fzf owned Ctrl+R. atuin owns it now
+#    speed  static antidote file (antidote itself no longer sourced),
+#           tool inits cached to disk + keyed on the real binary path,
+#           atuin/carapace/fnm deferred until after the first prompt
+#    color  no ANSI blue/magenta anywhere; 24-bit high-luminance palette
+#           for ls/eza, typed paths (F-Sy-H was magenta), p10k dir, fzf
+#    smart  suggestions: sequence → directory+frequency+recency (atuin DB)
+#           → history → completion
+#    ai     kollzsh (reloads the model per keypress) → persistent local
+#           OpenAI-compatible server, auto-start + idle shutdown
+#
+#  Profile startup:  ZPROFILE=1 zsh -i -c exit
+# =====================================================================
+
+# ---- 0. BOOT ---------------------------------------------------------
+zmodload zsh/datetime
+typeset -gF _ZS_T0=$EPOCHREALTIME
+[[ -n $ZPROFILE ]] && zmodload zsh/zprof
+
+setopt EXTENDED_GLOB INTERACTIVE_COMMENTS            # early: (#q…) qualifiers below need it
+zmodload -F zsh/files b:zf_rm b:zf_mv b:zf_mkdir     # fork-free file ops
+zmodload -F zsh/stat b:zstat
+zmodload zsh/parameter
+
+typeset -g ZSH_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/zsh
+typeset -g ZSH_CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/zsh
+typeset -g ZSH_DATA=${XDG_DATA_HOME:-$HOME/.local/share}/zsh
+[[ -d $ZSH_CACHE/completions && -d $ZSH_DATA && -d $ZSH_CONF ]] ||
+  zf_mkdir -p $ZSH_CACHE/completions $ZSH_DATA $ZSH_CONF
+
+# lib.zsh: locking, atomic writes, PID checks — every shared file below goes through it, because
+# several terminals (and background jobs) start, write and regenerate these files at the same time
+source $ZSH_CONF/lib.zsh 2>/dev/null || print -u2 "zsh config: $ZSH_CONF/lib.zsh is missing — shared files are unprotected"
+
+# Behaviour switches — override any of these in ~/.zshrc.local
+: ${ZSH_FAIL_HINT:=1}            # remind that `wtf` exists after failures (self-silences after 12)
+: ${ZSH_CD_HINTS:=1}             # one-line project summary when you enter a repo
+: ${ZSH_SMART_SUGGEST:=1}        # directory/frequency-aware autosuggestions from the atuin DB
+: ${ZSH_NOTIFY_AFTER:=0}         # seconds; >0 = desktop notification when a long command ends
+: ${ZSH_AUTO_UPDATE_PLUGINS:=0}  # 1 = weekly background `antidote update` (off: supply-chain caution)
+: ${ZSH_SLOW_MS:=150}            # startup budget; the weekly check warns when the average exceeds it
+
+# Console output has to happen BEFORE the instant-prompt block.
+if [[ -s $ZSH_CACHE/tip ]]; then
+  print -r -- "$(<$ZSH_CACHE/tip)"
+  zf_rm -f $ZSH_CACHE/tip
+fi
+if [[ ! -e $ZSH_DATA/welcomed ]]; then
+  print -r -- "zsh v4 loaded · first time: zsh-setup · cheat sheet: zhelp · palette: Ctrl+G · AI: ? <what you want>"
+  : >| $ZSH_DATA/welcomed
+fi
+
+# ---- 1. INSTANT PROMPT -----------------------------------------------
+typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+bindkey -e   # FIRST: EDITOR=nvim would otherwise select the vi keymap and later bindings get lost
+
+# ---- 2. PATH (only directories that exist) ---------------------------
+typeset -U path fpath
+path=(
+  $HOME/.opencode/bin(N-/)
+  $HOME/.codeium/windsurf/bin(N-/)
+  /opt/homebrew/opt/openjdk/bin(N-/)
+  /opt/homebrew/bin(N-/)
+  /opt/homebrew/sbin(N-/)
+  /usr/local/bin(N-/)
+  $HOME/.local/bin(N-/)
+  $HOME/bin(N-/)
+  $HOME/.cargo/bin(N-/)
+  $HOME/.antigravity/antigravity/bin(N-/)
+  $HOME/google-cloud-sdk/bin(N-/)
+  $path
+)
+export PATH
+
+# ---- 3. ENVIRONMENT ---------------------------------------------------
+export LANG=en_US.UTF-8
+export EDITOR='nvim' VISUAL='nvim'
+export LESS='-R -F -g -i -J -M -W -x4'
+export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export CLICOLOR=1
+WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'     # path segments are separate words
+
+# ---- 4. COLORS — tuned for BLACK + SEMI-TRANSPARENT --------------------
+# Rules for this background: nothing below ~55% luminance, no dark blue,
+# no purple/magenta. Plenty of DISTINCT hues so file kinds stay scannable.
+# Change a hex here and ls, eza, typed paths, prompt and fzf all follow.
+typeset -gA ZC=(
+  dir     '#7dcfff'   # folders              sky blue, bold
+  exe     '#9ece6a'   # executables          green
+  link    '#ffb86c'   # symlinks             orange
+  archive '#f7768e'   # zip/tar/dmg          coral
+  media   '#2ac3de'   # images/video/audio   cyan
+  code    '#e0af68'   # source files         amber
+  data    '#73daca'   # json/yaml/toml/csv   mint
+  doc     '#c0caf5'   # md/txt/pdf           pale periwinkle
+  text    '#cdd6f4'   # body text
+  warn    '#f9e2af'   # devices, pipes       yellow
+  err     '#ff7a93'   # broken links         bright red
+  dim     '#9aa5ce'   # dates, punctuation   readable gray (fg=8 is not)
+  acc     '#89ddff'   # accents: spinner, fzf info, global aliases (was referenced but never defined)
+)
+# For zsh-colors palette display (truecolor blocks) — keep 24-bit
+_zs_rgb() { local h=${1#\#}; REPLY="38;2;$((16#${h[1,2]}));$((16#${h[3,4]}));$((16#${h[5,6]}))" }
+# hex -> nearest xterm-256 SGR ("38;5;N"). Truecolor in LS_COLORS gets
+# misparsed by eza (blue byte leaks as a bg code), so use 256 here.
+_zs_q() { REPLY=$(( $1 < 48 ? 0 : $1 < 115 ? 1 : ($1 - 35) / 40 )) }
+_zs_256() {
+  local h=${1#\#} r g b ri gi bi gy gyi gv d1 d2
+  local -a lv=(0 95 135 175 215 255)
+  r=$((16#${h[1,2]})); g=$((16#${h[3,4]})); b=$((16#${h[5,6]}))
+  _zs_q $r; ri=$REPLY; _zs_q $g; gi=$REPLY; _zs_q $b; bi=$REPLY
+  gy=$(( (r + g + b) / 3 ))
+  gyi=$(( gy > 238 ? 23 : gy > 3 ? (gy - 3) / 10 : 0 )); gv=$(( 8 + 10 * gyi ))
+  d1=$(( (r-lv[ri+1])**2 + (g-lv[gi+1])**2 + (b-lv[bi+1])**2 ))
+  d2=$(( (r-gv)**2 + (g-gv)**2 + (b-gv)**2 ))
+  (( d1 <= d2 )) && REPLY="38;5;$(( 16 + 36*ri + 6*gi + bi ))" \
+                 || REPLY="38;5;$(( 232 + gyi ))"
+}
+
+() {
+  emulate -L zsh
+  local -A C
+  local k ext lsc
+  for k in ${(k)ZC}; do _zs_256 $ZC[$k]; C[$k]=$REPLY; done
+
+  # ---- LS_COLORS: read by BSD ls, GNU ls, eza, fzf-tab and zsh completion
+  lsc="di=1;${C[dir]}:fi=${C[text]}:ln=${C[link]}:or=1;${C[err]}:mi=1;${C[err]}:ex=1;${C[exe]}"
+  lsc+=":pi=${C[warn]}:so=${C[warn]}:bd=${C[warn]}:cd=${C[warn]}"
+  lsc+=":su=1;${C[err]}:sg=1;${C[err]}:st=${C[dir]}:tw=${C[dir]}:ow=${C[dir]}"
+  for ext in tar tgz taz gz bz2 xz zst zip 7z rar dmg pkg iso jar whl deb; do lsc+=":*.$ext=${C[archive]}"; done
+  for ext in png jpg jpeg gif webp svg heic tiff bmp ico mp4 mov mkv avi webm mp3 wav flac m4a aac; do lsc+=":*.$ext=${C[media]}"; done
+  for ext in py js ts jsx tsx rs go c h cpp hpp java rb php swift kt lua zsh sh bash fish sql ipynb; do lsc+=":*.$ext=${C[code]}"; done
+  for ext in json yaml yml toml ini conf cfg env xml csv tsv parquet db sqlite lock; do lsc+=":*.$ext=${C[data]}"; done
+  for ext in md markdown txt rst pdf doc docx rtf tex epub; do lsc+=":*.$ext=${C[doc]}"; done
+  export LS_COLORS=$lsc
+
+  # ---- EZA_COLORS: minimal + NO background/underline, readable on black
+  # file colors come from LS_COLORS above; these just fix the UI chrome that
+  # was unreadable (1;90m bright-black on black) and the header underline.
+  export EZA_COLORS="hd=${C[dim]}:lp=${C[dim]}:cc=${C[dim]}:da=${C[dim]}:hd=${C[dim]}:xx=${C[dim]}:oc=${C[dim]}"
+  EZA_COLORS+=":uu=${C[warn]}:gu=${C[dim]}:un=${C[err]}:gn=${C[err]}:sn=${C[exe]}:sb=${C[exe]}"
+  EZA_COLORS+=":ur=${C[warn]}:uw=${C[err]}:ux=${C[exe]}:ue=${C[exe]}"
+  EZA_COLORS+=":gr=${C[warn]}:gw=${C[err]}:gx=${C[exe]}:tr=${C[warn]}:tw=${C[err]}:tx=${C[exe]}"
+  EZA_COLORS+=":ga=${C[exe]}:gm=${C[warn]}:gd=${C[err]}:cr=${C[warn]}:mp=${C[dim]}"
+}
+export LSCOLORS=GxFxCxDxBxegedabagacad   # BSD ls fallback: bold-cyan dirs, bold-green exe
+unset CLICOLOR_FORCE                     # was export empty, which *forces* color into pipes (BSD checks existence)
+
+# eza flag support differs by version; probe once and cache the result, so a
+# too-old eza degrades to plain colors instead of erroring on every `ls`.
+_zs_eza_flags() {
+  local f=$ZSH_CACHE/eza-flags
+  if [[ ! -s $f || ${commands[eza]:A} -nt $f ]]; then
+    if eza --color=auto --icons=auto --version >/dev/null 2>&1; then
+      print -r -- '--color=auto --icons=auto' >| $f
+    elif eza --color=auto --icons --version >/dev/null 2>&1; then
+      print -r -- '--color=auto --icons' >| $f
+    else
+      print -r -- '--color=auto' >| $f
+    fi
+  fi
+  REPLY=$(<$f)
+}
+
+function zsh-colors {   # diagnose + preview. Run this if `ls` looks wrong.
+  emulate -L zsh
+  local k
+  print -P "%Beza%b       ${commands[eza]:-NOT INSTALLED — \`ls\` falls back to BSD ls}"
+  (( $+commands[eza] )) && print -P "%Bversion%b   $(eza --version 2>&1 | head -1)"
+  _zs_eza_flags; print -P "%Bflags%b     ls = eza $REPLY --group-directories-first"
+  print -P "%Balias ls%b  ${aliases[ls]:-<none: ls is not aliased>}"
+  print -P "%BLS_COLORS%b ${#LS_COLORS} chars · %BEZA_COLORS%b ${#EZA_COLORS} chars"
+  print -P "\n%Bpalette%b (if these are all white, your terminal is not doing 24-bit color)"
+  for k in ${(ok)ZC}; do
+    _zs_rgb $ZC[$k]
+    printf '  \033[%sm%-9s %s  ████████\033[0m\n' "$REPLY" "$k" "$ZC[$k]"
+  done
+  if (( $+commands[eza] )); then
+    print -P "\n%Braw eza test%b (forced color — if THIS is colorless, eza is rejecting the env vars)"
+    eza --color=always -1 2>/dev/null | head -8
+    print -P "\n%Bwith your flags%b"
+    eza ${=REPLY} -1 2>/dev/null | head -8
+  fi
+  print -P "\n%Bterminal%b  TERM=$TERM COLORTERM=${COLORTERM:-<unset — Ghostty should set truecolor>}"
+}
+
+# line editor highlights
+zle_highlight=('region:bg=#45475a,fg=#ffffff' 'paste:none' "isearch:fg=$ZC[warn],underline")   # quoted: '#' is a glob operator under EXTENDED_GLOB
+
+# bat theme: use your custom Mocha file if present, else bat ≥0.25's built-in
+() {
+  local -a t=( ${XDG_CONFIG_HOME:-$HOME/.config}/bat/themes/**/*[Mm]ocha*.tmTheme(N) )
+  if (( $#t )); then export BAT_THEME=${t[1]:t:r}; else export BAT_THEME='Catppuccin Mocha'; fi
+}
+
+# ---- 5. HISTORY (order-preserving — sequence learning depends on it) --
+HISTFILE=$HOME/.zsh_history
+HISTSIZE=200000
+SAVEHIST=200000
+setopt EXTENDED_HISTORY SHARE_HISTORY HIST_FCNTL_LOCK HIST_IGNORE_DUPS \
+       HIST_FIND_NO_DUPS HIST_IGNORE_SPACE HIST_REDUCE_BLANKS HIST_VERIFY
+# NOT set on purpose: HIST_IGNORE_ALL_DUPS / HIST_EXPIRE_DUPS_FIRST /
+# HIST_SAVE_NO_DUPS. They delete older duplicates, which destroys both
+# "what follows what" and frequency — the two signals this shell learns from.
+
+# ---- 6. PLUGIN CONFIG (must precede plugin load) ----------------------
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)   # _zs_finalize upgrades this once habits.zsh is loaded
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=60
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=$ZC[dim]"
+ZSH_AUTOSUGGEST_USE_ASYNC=1
+ZSH_AUTOSUGGEST_HISTORY_IGNORE='?(#c150,)'
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1      # perf; _zs_finalize re-binds once after everything loaded
+
+ZSH_HIGHLIGHT_MAXLENGTH=512
+typeset -gA FAST_HIGHLIGHT_STYLES
+_zs_fsh_colors() {   # F-Sy-H defaults: path=magenta, comment=black, globbing=blue → all unreadable here
+  local p
+  for p in '' ${FAST_THEME_NAME:-default}; do
+    FAST_HIGHLIGHT_STYLES[${p}path]="fg=$ZC[dir]"
+    FAST_HIGHLIGHT_STYLES[${p}path-to-dir]="fg=$ZC[dir],underline"
+    FAST_HIGHLIGHT_STYLES[${p}comment]="fg=$ZC[dim]"
+    FAST_HIGHLIGHT_STYLES[${p}globbing]="fg=$ZC[warn],bold"
+    FAST_HIGHLIGHT_STYLES[${p}history-expansion]="fg=$ZC[warn],bold"
+    FAST_HIGHLIGHT_STYLES[${p}global-alias]="fg=$ZC[acc],bold"
+  done
+}
+_zs_fsh_colors
+
+export YSU_MESSAGE_POSITION='after' YSU_MODE=ALL
+ABBR_QUIET=1
+ABBR_GET_AVAILABLE_ABBREVIATION=1    # zsh-abbr: tell me when I typed out something I have an abbr for
+ABBR_LOG_AVAILABLE_ABBREVIATION=1
+export AUTOSWITCH_MESSAGE_FORMAT='venv: %venv_name (%py_version)'
+export FORGIT_NO_ALIASES=true
+
+# ---- 7. PLUGINS: antidote → one static file ---------------------------
+# antidote itself is only sourced when plugins.txt changes. Normal startups
+# source a single pre-generated file. Everything interactive is deferred
+# (zsh-defer) and runs in list order after the first prompt is on screen.
+typeset -g ZS_ANTIDOTE=/opt/homebrew/opt/antidote/share/antidote/antidote.zsh
+zstyle ':antidote:bundle' use-friendly-names 'yes'
+
+_zs_ptxt=$ZSH_CONF/plugins.txt
+_zs_pzsh=$ZSH_CACHE/plugins.zsh
+if [[ ! -f $_zs_ptxt ]]; then
+  command cat > $_zs_ptxt <<'EOF'   # `command`: cat is aliased to bat further down
+# Edit freely — the static bundle regenerates on next shell start.
+romkatv/powerlevel10k
+zsh-users/zsh-completions kind:fpath path:src
+
+# deferred, IN THIS ORDER: fzf-tab after compinit and before widget wrappers;
+# autosuggestions late; syntax highlighting after it; substring-search last.
+Aloxaf/fzf-tab kind:defer
+hlissner/zsh-autopair kind:defer
+olets/zsh-abbr kind:defer
+MichaelAquilina/zsh-you-should-use kind:defer
+MichaelAquilina/zsh-autoswitch-virtualenv kind:defer
+wfxr/forgit kind:defer
+ohmyzsh/ohmyzsh path:plugins/sudo kind:defer
+zsh-users/zsh-autosuggestions kind:defer
+zdharma-continuum/fast-syntax-highlighting kind:defer
+zsh-users/zsh-history-substring-search kind:defer
+EOF
+fi
+# Regenerate under a lock, re-checking inside it: terminals opened together after a plugins.txt edit
+# used to share ONE fixed temp filename and corrupt the bundle; now one regenerates, the others wait and reuse.
+_zs_regen_plugins() {   # <plugins.txt> <bundle>
+  [[ ! -s $2 || $1 -nt $2 ]] || return 0
+  local tmp=$2.tmp.${sysparams[pid]}
+  ( source $ZS_ANTIDOTE && antidote bundle < $1 >| $tmp ) && [[ -s $tmp ]] && zf_mv -f $tmp $2 || { zf_rm -f $tmp; return 1 }
+}
+if [[ ! -s $_zs_pzsh || $_zs_ptxt -nt $_zs_pzsh ]]; then
+  if [[ -r $ZS_ANTIDOTE ]]; then
+    _zs_locked -t 90 $_zs_pzsh _zs_regen_plugins $_zs_ptxt $_zs_pzsh ||
+      print -u2 "plugin bundle could not be regenerated (kept the previous one, if any) — run: zup"
+  else
+    print -u2 "antidote missing → brew install antidote, then: exec zsh"
+  fi
+fi
+unfunction _zs_regen_plugins
+[[ -s $_zs_pzsh ]] && source $_zs_pzsh
+unset _zs_ptxt _zs_pzsh
+antidote() { unfunction antidote; source $ZS_ANTIDOTE && antidote "$@" }   # lazy
+
+# ---- 8. HELPERS --------------------------------------------------------
+# _zs_cached <name> <binary> <generator…>
+#   Source the cached output of an init command (`zoxide init zsh` …).
+#   Key = resolved binary path (the Cellar path contains the version), so a
+#   `brew upgrade` invalidates it. mtime is NOT reliable for brew bottles.
+_zs_cached() {
+  local name=$1 exe=${commands[$2]} file=$ZSH_CACHE/init-$1.zsh first=''
+  shift 2
+  [[ -n $exe ]] || return 1
+  local key="# key: ${exe:A} $*"
+  [[ -r $file ]] && IFS= read -r first < $file
+  if [[ $first != $key ]]; then
+    # one shell regenerates, written whole (temp + rename) — a terminal starting at the same moment
+    # used to source a half-written init script. A generator that fails keeps the previous good cache.
+    _zs_locked -t 15 $file _zs_cache_regen $file $key "$@"
+    [[ -r $file ]] || return 1
+  fi
+  source $file
+}
+_zs_cache_regen() {   # <file> <key> <generator…>   (under the lock; re-check in case another shell just did it)
+  local file=$1 key=$2 first='' tmp=$1.tmp.${sysparams[pid]}; shift 2
+  [[ -r $file ]] && IFS= read -r first < $file
+  [[ $first == $key ]] && return 0
+  if { print -r -- $key; "$@" } >| $tmp 2>/dev/null && [[ $(command wc -c < $tmp) -gt $(( ${#key} + 1 )) ]]; then     # ...and printed something beyond the key line
+    zf_mv -f $tmp $file && zcompile $file 2>/dev/null
+  else
+    zf_rm -f $tmp; return 1
+  fi
+}
+# _zs_later <zsh-defer args…> — run after the first prompt (or now, if zsh-defer is absent)
+_zs_later() {
+  if (( $+functions[zsh-defer] )); then zsh-defer "$@"
+  elif [[ $1 == -c ]]; then eval "$2"
+  else "$@"; fi
+}
+
+# ---- 9. COMPLETION -----------------------------------------------------
+fpath=($ZSH_CACHE/completions $fpath)
+autoload -Uz compinit
+_zs_zcd=$ZSH_CACHE/zcompdump
+if [[ -n $_zs_zcd(#qN.mh-20) ]]; then
+  compinit -C -d $_zs_zcd                           # fresh dump: skip scan + security audit
+else
+  compinit -d $_zs_zcd; command touch $_zs_zcd      # touch: compinit leaves mtime alone if nothing changed
+fi
+unset _zs_zcd
+_zs_later -c 'autoload -Uz bashcompinit && bashcompinit'
+
+setopt AUTO_CD AUTO_PUSHD PUSHD_IGNORE_DUPS PUSHD_SILENT CDABLE_VARS
+setopt GLOB_DOTS NO_NOMATCH NUMERIC_GLOB_SORT
+setopt COMPLETE_IN_WORD ALWAYS_TO_END AUTO_MENU LIST_PACKED
+setopt NO_BEEP NO_FLOW_CONTROL MULTIOS RM_STAR_SILENT
+unsetopt CORRECT CORRECT_ALL
+
+zstyle ':completion:*' completer _extensions _complete _approximate
+zstyle ':completion:*' matcher-list \
+  'm:{[:lower:][:upper:]-_}={[:upper:][:lower:]_-}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path $ZSH_CACHE/compcache
+zstyle ':completion:*' list-suffixes
+zstyle ':completion:*' expand prefix suffix
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*:warnings' format '%F{red}-- no matches --%f'
+zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
+zstyle ':completion:*' special-dirs true
+zstyle ':completion:*' menu no                       # fzf-tab owns the menu
+zstyle ':completion:*:git-checkout:*' sort false
+
+zstyle ':fzf-tab:*' use-fzf-default-opts yes
+zstyle ':fzf-tab:*' switch-group '<' '>'
+zstyle ':fzf-tab:*' fzf-flags '--height=60%'
+zstyle ':fzf-tab:complete:(cd|z|ls|eza|ll|la|lt|bat|cat|nvim|vim|code|cp|mv|rm|del|open):*' fzf-preview \
+  'if [[ -d $realpath ]]; then eza -1 --color=always --icons=always --group-directories-first $realpath; elif [[ -f $realpath ]]; then bat -n --color=always --line-range :200 $realpath 2>/dev/null; fi'
+zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'eza --tree --level=2 --color=always $realpath'
+zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview 'ps -p $word -o pid,user,%cpu,%mem,command 2>/dev/null'
+zstyle ':fzf-tab:complete:(-command-|-parameter-|-brace-parameter-|export|unset|expand):*' fzf-preview 'echo ${(P)word}'
+
+# ---- 10. TOOL INITS: cached (sync) or deferred -------------------------
+if (( $+commands[fzf] )); then
+  _zs_cached fzf fzf fzf --zsh
+  if (( $+commands[fd] )); then
+    export FZF_DEFAULT_COMMAND='fd --hidden --strip-cwd-prefix --exclude .git'
+    export FZF_CTRL_T_COMMAND=$FZF_DEFAULT_COMMAND
+    export FZF_ALT_C_COMMAND='fd --type=d --hidden --strip-cwd-prefix --exclude .git'
+    _fzf_compgen_path() { fd --hidden --exclude .git . "$1" }
+    _fzf_compgen_dir()  { fd --type=d --hidden --exclude .git . "$1" }
+  fi
+  # bg:-1 / gutter:-1 → fzf stays transparent instead of painting a slab over the wallpaper
+  export FZF_DEFAULT_OPTS="
+    --height=80% --layout=reverse --border=rounded --info=inline-right
+    --prompt='❯ ' --pointer='▶' --marker='✓'
+    --bind=ctrl-/:toggle-preview,ctrl-d:half-page-down,ctrl-u:half-page-up
+    --bind='ctrl-y:execute-silent(echo -n {+} | pbcopy)+abort'
+    --color=bg:-1,gutter:-1,bg+:#313244,fg:$ZC[text],fg+:#ffffff,hl:$ZC[warn],hl+:$ZC[warn]
+    --color=border:#6c7086,header:$ZC[dir],info:$ZC[acc],prompt:$ZC[dir]
+    --color=pointer:$ZC[link],marker:$ZC[exe],spinner:$ZC[acc]"
+  export FZF_CTRL_T_OPTS="--walker-skip .git,node_modules,target,.venv
+    --preview 'bat -n --color=always --line-range :500 {} 2>/dev/null || eza -1 --color=always {}'"
+  export FZF_ALT_C_OPTS="--preview 'eza --tree --level=2 --color=always {} | head -200'"
+  bindkey 'ç' fzf-cd-widget            # macOS Option+C when Option is not Alt
+fi
+
+if (( $+commands[zoxide] )); then
+  _zs_cached zoxide zoxide zoxide init zsh
+  alias cdi='zi' cdb='z -' cdl='zoxide query -l' cdr='zoxide remove'
+fi
+cd() {    # file → its directory; otherwise zoxide's learned jump, then plain cd
+  if [[ -f $1 ]]; then builtin cd -- ${1:h}
+  elif (( $+functions[z] )); then z "$@" 2>/dev/null || builtin cd "$@"
+  else builtin cd "$@"; fi
+}
+
+_zs_gen_atuin() { atuin init zsh --disable-up-arrow --disable-ai 2>/dev/null || atuin init zsh --disable-up-arrow }
+_zs_init_atuin()    { (( $+commands[atuin] ))    && _zs_cached atuin atuin _zs_gen_atuin }
+_zs_init_carapace() { (( $+commands[carapace] )) && { export CARAPACE_BRIDGES='zsh,bash'; _zs_cached carapace carapace carapace _carapace zsh } }
+_zs_init_fnm()      { (( $+commands[fnm] ))      && eval "$(fnm env --use-on-cd --shell zsh)" }   # per-session paths: not cacheable
+_zs_later _zs_init_atuin
+_zs_later _zs_init_carapace
+_zs_later _zs_init_fnm
+[[ -f $HOME/.openclaw/completions/openclaw.zsh ]] && _zs_later source $HOME/.openclaw/completions/openclaw.zsh
+
+# lazy conda — costs nothing until you call it
+for _zs_c in /opt/homebrew/Caskroom/miniconda/base $HOME/miniconda3; do
+  [[ -x $_zs_c/bin/conda ]] || continue
+  typeset -g _ZS_CONDA=$_zs_c
+  conda() {
+    unfunction conda
+    eval "$($_ZS_CONDA/bin/conda shell.zsh hook 2>/dev/null)" || path=($_ZS_CONDA/bin $path)
+    conda "$@"
+  }
+  break
+done
+unset _zs_c
+
+# ---- 11. MODERN TOOLS (classic commands are never shadowed) ------------
+if (( $+commands[eza] )); then
+  _zs_eza_flags
+  # ls = grid, no header/git/perms noise, icons off for clean folders (lt keeps icons for tree)
+  # ll/la = long but still no header underline and no git background that washed out text
+  _zs_ls="eza $REPLY --group-directories-first"           # base probe
+  alias ls="eza --color=auto --icons=never --group-directories-first"
+  alias ll="eza --color=auto --icons=never --group-directories-first -l --time-style=relative --no-git"
+  alias la="eza --color=auto --icons=never --group-directories-first -la --no-git"
+  alias lt="eza $REPLY --tree --level=2 --icons=always"
+  alias lta="eza $REPLY --tree --level=2 -a --icons=always"
+  alias ltree="eza $REPLY --tree"
+  alias llm="eza $REPLY --group-directories-first -la --sort=modified --reverse --no-git"
+  alias lsize="eza $REPLY --group-directories-first -la --sort=size --reverse --no-git"
+  alias lgit="eza $REPLY --group-directories-first -la --git --git-ignore"
+  # keep probed flags for lt/ltree, but ls/ll/la now explicit
+  _zs_eza="eza $REPLY --group-directories-first"
+  unset _zs_eza _zs_ls
+fi
+if (( $+commands[bat] )); then
+  export BAT_STYLE='numbers,changes,header,grid'
+  alias cat='bat --paging=never' catt='bat --paging=always' catp='bat --plain'
+  export MANPAGER="sh -c 'col -bx | bat -l man -p'" MANROFFOPT='-c'
+  help() { "$@" --help 2>&1 | bat --plain --language=help }
+fi
+if (( $+commands[rg] )); then
+  export RIPGREP_CONFIG_PATH=$HOME/.ripgreprc
+  alias rga='rg --hidden --no-ignore' rgf='rg --files-with-matches' rgc='rg --count'
+fi
+(( $+commands[fd] ))        && alias fdf='fd --type f' fdd='fd --type d' fdh='fd --hidden' fda='fd --hidden --no-ignore'
+(( $+commands[dust] ))      && alias d1='dust -d 1' dx='dust -X .git -X node_modules -X .venv'
+(( $+commands[procs] ))     && alias pc='procs' pcc='procs --sortd cpu' pcm='procs --sortd mem' pct='procs --tree'
+(( $+commands[btm] ))       && alias bt='btm'
+(( $+commands[xh] ))        && alias req='xh' reqj='xh --json'
+(( $+commands[gitui] ))     && alias gu='gitui'
+(( $+commands[lazygit] ))   && alias lg='lazygit'
+(( $+commands[lazydocker] )) && alias lzd='lazydocker'
+(( $+commands[tokei] ))     && alias stats='tokei --sort lines'
+(( $+commands[hyperfine] )) && alias bench='hyperfine --warmup 3' bench-zsh='hyperfine --warmup 2 "zsh -i -c exit"'
+(( $+commands[bandwhich] )) && alias netmon='sudo bandwhich'
+(( $+commands[gping] ))     && alias pingg='gping'
+(( $+commands[tldr] ))      && { alias tldru='tldr --update'; t() { tldr "$@" | bat -p -l markdown } }
+(( $+commands[broot] ))     && { alias br='broot'; [[ -r ~/.config/broot/launcher/bash/br ]] && _zs_later source ~/.config/broot/launcher/bash/br }
+if (( $+commands[sd] )); then
+  replace()     { sd "$1" "$2" "${@:3}" }
+  replace-all() { fd -t f -x sd "$1" "$2" }
+fi
+
+# ---- 12. GIT ------------------------------------------------------------
+alias gs='git status -sb' ga='git add' gaa='git add --all' gc='git commit -v'
+alias gp='git push' gpf='git push --force-with-lease' gpl='git pull --rebase --autostash'
+alias gco='git checkout' gcb='git checkout -b' gsw='git switch' gb='git branch -vv'
+alias gf='git fetch --all --prune' gst='git stash' gstp='git stash pop'
+alias gd='git diff' gds='git diff --staged' gshow='git show'
+alias gl='git log --graph --pretty=format:"%C(yellow)%h%Creset%C(auto)%d%Creset %s %C(green)(%cr) %C(cyan)<%an>%Creset" --abbrev-commit'
+alias gundo='git reset --soft HEAD~1' gwip='git add -A && git commit -m "wip" --no-verify'
+alias gifa='forgit::add' gifl='forgit::log' gifd='forgit::diff' gifco='forgit::checkout::file'
+alias gifcb='forgit::checkout::branch' gifcln='forgit::clean' gifix='forgit::fixup'
+
+# ---- 13. ESSENTIALS -----------------------------------------------------
+alias ..='cd ..' ...='cd ../..' ....='cd ../../..'
+alias -- -='cd -'
+alias mkdir='mkdir -pv' cp='cp -iv' mv='mv -iv'
+alias h='history' which='type -a' now='date +"%T"' df='df -H' py='python'
+alias path='print -l $path'
+alias emacs='command emacs -nw' em='emacs'
+alias claude-screenshot="$HOME/.claude_screenshot/launch_stealth.sh"
+alias -s {md,txt,json,yaml,yml,toml,ini,conf}=$EDITOR    # type a filename → opens it
+alias -s log='bat --paging=always'
+
+# `foo.py` / `foo` → python foo.py; otherwise suggest near-misses (edit distance 1)
+command_not_found_handler() {
+  emulate -L zsh; setopt extendedglob
+  local cmd=$1
+  if [[ -f $cmd && $cmd == *.py ]]; then python "$cmd" "${@:2}"; return
+  elif [[ -f $cmd.py ]]; then python "$cmd.py" "${@:2}"; return; fi
+  print -u2 -r -- "zsh: command not found: $cmd"
+  if (( $#cmd >= 3 )); then
+    local -a near
+    near=( ${(k)commands[(I)(#a1)$cmd]} ${(k)aliases[(I)(#a1)$cmd]} ${(k)functions[(I)(#a1)$cmd]} )
+    near=( ${${(u)near}:#_*} )
+    (( $#near )) && print -u2 -r -- "  did you mean: ${(j:  :)near[1,6]}"
+  fi
+  print -u2 -r -- "  or ask:  ? <what you were trying to do>"
+  return 127
+}
+
+# ---- 14. MODULES ----------------------------------------------------------
+# Sourced synchronously on purpose: they only define functions (≈1 ms once
+# compiled), and the accept-line hook in ai.zsh must exist BEFORE the deferred
+# plugins wrap widgets, so autosuggestions/highlighting layer on top of it.
+for _zs_m in habits ai tools supershell carousel iterm agents learned; do
+  [[ -r $ZSH_CONF/$_zs_m.zsh ]] && source $ZSH_CONF/$_zs_m.zsh
+done
+unset _zs_m
+
+# ---- 15. HOOKS: remember outcome · hint on failure · project context -------
+autoload -Uz add-zsh-hook add-zle-hook-widget
+typeset -g  _ZS_LAST_CMD='' _ZS_PREV_CMD=''
+typeset -gi _ZS_LAST_STATUS=0 _ZS_CMD_RAN=0
+typeset -gF _ZS_CMD_T0=0
+typeset -gA _ZS_SEEN
+
+_zs_preexec() {
+  # wtf/explain/zagent talk ABOUT the previous command — don't let them replace it,
+  # so `?? why did that fail` still sees the command that actually failed as context.
+  [[ $1 == (wtf|wtf\ -r|explain\ *|\ explain\ *|zagent*|\ zagent*) ]] && return 0
+  _ZS_PREV_CMD=$_ZS_LAST_CMD; _ZS_LAST_CMD=$1
+  _ZS_CMD_RAN=1; _ZS_CMD_T0=$EPOCHREALTIME
+}
+_zs_precmd() {
+  local st=$?
+  (( $+functions[_zs_watch_note] )) && _zs_watch_note   # summary from a job that finished while you were away
+  (( _ZS_CMD_RAN )) || return 0          # zsh-defer fires precmd hooks too; ignore those
+  _ZS_CMD_RAN=0; _ZS_LAST_STATUS=$st
+  local -F dur=$(( EPOCHREALTIME - _ZS_CMD_T0 ))
+  (( $+functions[_zs_watch_check] )) && _zs_watch_check $st $dur
+  # ?? proposed this command and it just ran: tell the next ?? turn what happened
+  # (must live here, not a separate hook — $? is only correct in the FIRST precmd hook)
+  if [[ -n $_ZS_AIPROP && $_ZS_LAST_CMD == "$_ZS_AIPROP"* ]]; then
+    local _aiout=''
+    (( ${ZSH_AGENT_SCREEN:-1} )) && (( $+functions[_zs_tab_output] )) && _aiout=$(_zs_tab_output 2>/dev/null | tail -n 30)
+    (( $+commands[jq] )) && jq -nc --arg c "$_ZS_LAST_CMD" --argjson s $st --arg o "$_aiout" --argjson t $EPOCHSECONDS \
+      '{command:$c, status:$s, output:$o, t:$t}' 2>/dev/null | _zs_write_atomic $ZSH_CACHE/agent-feedback.json
+    _ZS_AIPROP=''
+  fi
+  if (( ZSH_NOTIFY_AFTER > 0 && dur >= ZSH_NOTIFY_AFTER )); then
+    print -n -- "\e]9;${_ZS_LAST_CMD[1,60]} · ${dur%.*}s · exit $st\a"
+  fi
+  (( st == 0 || st == 130 || st == 146 || st == 148 || ! ZSH_FAIL_HINT )) && return 0
+  case ${${(z)_ZS_LAST_CMD}[1]} in
+    grep|rg|diff|cmp|test|\[|false|wtf|ai) return 0 ;;   # routine non-zero exits
+  esac
+  local -i n=0
+  [[ -r $ZSH_DATA/hint-count ]] && n=$(<$ZSH_DATA/hint-count)
+  if (( n < 12 )); then
+    print -P -- "%F{$ZC[dim]}  ↳ exit $st · %Bwtf%b explains it · Ctrl+X f puts a fix on the prompt%f"
+    print -r -- $(( n + 1 )) >| $ZSH_DATA/hint-count
+  fi
+  return 0
+}
+_zs_chpwd() {
+  emulate -L zsh
+  (( ZSH_CD_HINTS )) || return 0
+  [[ -e .git || -f pyproject.toml || -f package.json || -f Cargo.toml || -f go.mod ]] || return 0
+  (( ${+_ZS_SEEN[$PWD]} )) && return 0
+  _ZS_SEEN[$PWD]=1
+  local -a stack
+  local branch='' top=''
+  [[ -f pyproject.toml || -f requirements.txt || -f setup.py ]] && stack+=python
+  [[ -f uv.lock ]]      && stack+=uv
+  [[ -f package.json ]] && stack+=node
+  [[ -f Cargo.toml ]]   && stack+=rust
+  [[ -f go.mod ]]       && stack+=go
+  [[ -f Dockerfile || -f compose.yaml || -f compose.yml || -f docker-compose.yml ]] && stack+=docker
+  [[ -f template.yaml || -f samconfig.toml || -f serverless.yml || -f cdk.json ]] && stack+=aws
+  [[ -f justfile || -f Justfile ]] && stack+=just
+  [[ -f Makefile ]]     && stack+=make
+  [[ -r .git/HEAD ]]    && branch=${$(<.git/HEAD)#ref: refs/heads/}
+  (( $+functions[_zs_here_top] )) && top=$(_zs_here_top 3)
+  (( $#stack )) || stack=(repo)
+  print -P -- "%F{$ZC[dim]}◆ ${(j: · :)stack}${branch:+  ⎇ ${branch//\%/%%}}${top:+  ↻ ${top//\%/%%}}%f"
+}
+add-zsh-hook preexec _zs_preexec
+add-zsh-hook precmd  _zs_precmd
+add-zsh-hook chpwd   _zs_chpwd
+
+# ---- 16. KEYS ---------------------------------------------------------------
+# Up/Down: line movement inside multi-line commands, else substring search (supershell.zsh)
+() {
+  local up=history-substring-search-up dn=history-substring-search-down
+  (( $+functions[_zs_up] )) && up=_zs_up dn=_zs_down
+  bindkey "${terminfo[kcuu1]:-^[[A}" $up; bindkey '^[[A' $up; bindkey '^[OA' $up
+  bindkey "${terminfo[kcud1]:-^[[B}" $dn; bindkey '^[[B' $dn; bindkey '^[OB' $dn
+}
+HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND='bg=#a6e3a1,fg=#000000,bold'
+HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND='bg=#f38ba8,fg=#000000,bold'
+bindkey '^[[1;3D' backward-word
+bindkey '^[[1;3C' forward-word
+bindkey '^[[H'    beginning-of-line
+bindkey '^[[F'    end-of-line
+bindkey '^[[3~'   delete-char
+bindkey '^[d'     kill-word
+bindkey '^[^?'    backward-kill-word
+bindkey '^ '      autosuggest-accept            # Ctrl+Space: take the prediction
+autoload -Uz edit-command-line; zle -N edit-command-line
+bindkey '^X^E' edit-command-line
+# smart layer — widgets live in the modules; bind only what exists
+() {
+  local k w
+  for k w in '^G' _zs_palette_widget  '^O' _zai_cmd_widget  '^Xa' _zai_cmd_widget \
+             '^Xe' _zai_explain_widget '^Xf' _zai_fix_widget '^Xh' _zs_here_widget \
+             '^N' _zs_suggest_widget \
+             '^[' _zs_aimode_esc  '^D' _zs_aimode_ctrl_d \
+             '^Z' _zs_ctrl_z  '^Xc' _zs_copy_line  '^Xs' _zs_hs_widget  '^X^A' _zs_sel_all; do
+    (( $+functions[$w] )) && { zle -N $w; bindkey $k $w }
+  done
+}
+
+# ---- 17. PROMPT + LOCAL OVERRIDES ---------------------------------------------
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+if (( $+functions[p10k] )); then
+  typeset -g POWERLEVEL9K_TRANSIENT_PROMPT=always
+  typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_CHAR=''
+  typeset -g POWERLEVEL9K_LEFT_PROMPT_LAST_SEGMENT_END_SYMBOL=''
+  typeset -g POWERLEVEL9K_RIGHT_PROMPT_FIRST_SEGMENT_START_SYMBOL=''
+  # lean/pure styles paint the directory 31 (dark teal) / 103 (dull purple):
+  # invisible on translucent black. Only override when the dir segment has no
+  # background (i.e. not the rainbow/classic styles, where fg sits on a block).
+  if (( ! ${+POWERLEVEL9K_DIR_BACKGROUND} )); then
+    typeset -g POWERLEVEL9K_DIR_FOREGROUND=117            # bright sky
+    typeset -g POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=145  # light gray
+    typeset -g POWERLEVEL9K_DIR_ANCHOR_FOREGROUND=123     # bright cyan
+    typeset -g POWERLEVEL9K_DIR_ANCHOR_BOLD=true
+  fi
+  # background agent jobs (agents.zsh): ⚙ running · ✓ finished · ✗ failed
+  (( $+functions[prompt_aj] )) && POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(aj ${POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS:#aj})
+fi
+if [[ $TERM_PROGRAM == ghostty ]]; then      # keep the block cursor (or: shell-integration-features = no-cursor)
+  _zs_block_cursor() { print -n '\e[2 q' }
+  add-zle-hook-widget line-init _zs_block_cursor
+fi
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+
+# ---- 18. FINALIZE (queued last → runs after every deferred plugin) ---------------
+_zs_finalize() {
+  (( $+functions[_zsh_autosuggest_bind_widgets] )) && _zsh_autosuggest_bind_widgets
+  ZSH_AUTOSUGGEST_STRATEGY=(history completion)                  # atuin's init prepends its own; reset
+  (( $+functions[_zsh_autosuggest_strategy_smart] ))    && ZSH_AUTOSUGGEST_STRATEGY=(smart $ZSH_AUTOSUGGEST_STRATEGY)
+  (( $+functions[_zsh_autosuggest_strategy_sequence] )) && ZSH_AUTOSUGGEST_STRATEGY=(sequence $ZSH_AUTOSUGGEST_STRATEGY)
+  _zs_fsh_colors
+  (( $+widgets[atuin-search] )) && bindkey '^R' atuin-search
+  # AI modes: `?`/`??` + Tab. Wrap whatever owns Tab now (fzf-tab), last, so nothing re-binds over it.
+  if (( $+widgets[_zs_aimode_tab] )); then
+    local cur=${${(z)"$(bindkey '^I')"}[2]}
+    [[ $cur != _zs_aimode_tab ]] && typeset -g _ZS_TAB_ORIG=$cur
+    bindkey '^I' _zs_aimode_tab
+  fi
+  return 0
+}
+_zs_later _zs_finalize
+
+# weekly self-maintenance in the background (tools.zsh); the glob test costs no fork
+# The stamp test is only a cheap gate: shells opened together all pass it before any has touched
+# the stamp, so the job takes a try-once lock and re-checks — exactly one shell runs it.
+_zs_maint_once() { [[ -z $ZSH_DATA/maint.stamp(#qN.md-7) ]] || return 0; : >| $ZSH_DATA/maint.stamp; _zs_maintenance }
+if [[ -z $ZSH_DATA/maint.stamp(#qN.md-7) ]] && (( $+functions[_zs_maintenance] )); then
+  ( _zs_locked -t 0 $ZSH_DATA/maint _zs_maint_once ) >/dev/null 2>&1 &!
+fi
+
+_zs_compile() {   # zcompile anything newer than its .zwc
+  local f
+  for f in $HOME/.zshrc $ZSH_CONF/*.zsh(N) $ZSH_CACHE/zcompdump(N) $ZSH_CACHE/plugins.zsh(N); do
+    [[ -s $f && ( ! -s $f.zwc || $f -nt $f.zwc ) ]] && zcompile $f 2>/dev/null
+  done
+}
+( _zs_locked -t 0 $ZSH_CACHE/compile _zs_compile ) >/dev/null 2>&1 &!   # try-once: a second terminal skips it
+
+# startup telemetry (local file only) → `zsh-doctor` and the weekly check read it
+printf '%d %.0f\n' $EPOCHSECONDS $(( (EPOCHREALTIME - _ZS_T0) * 1000 )) >> $ZSH_DATA/startup.log
+[[ -n $ZPROFILE ]] && zprof
+
+

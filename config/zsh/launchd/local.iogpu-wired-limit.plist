@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Raises Metal's GPU working-set ceiling at boot so the deep model (??? — see
+  agent/DEEP_MODEL_PLAN.md) has ~19GB to work with instead of the ~16GB default.
+  This is a CEILING, not a reservation: it costs nothing while unused, and every
+  other app on this Mac is unaffected until something actually asks the GPU for
+  more than the old ~16GB default.
+
+  Install (needs sudo once; nothing here runs automatically without this step):
+    sudo cp ~/.config/zsh/launchd/local.iogpu-wired-limit.plist /Library/LaunchDaemons/
+    sudo chown root:wheel /Library/LaunchDaemons/local.iogpu-wired-limit.plist
+    sudo launchctl load /Library/LaunchDaemons/local.iogpu-wired-limit.plist
+  Verify:    sysctl iogpu.wired_limit_mb        # should read 19456 after a reboot,
+                                                 # or immediately after the load above
+  Uninstall: sudo launchctl unload /Library/LaunchDaemons/local.iogpu-wired-limit.plist
+             sudo rm /Library/LaunchDaemons/local.iogpu-wired-limit.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.iogpu-wired-limit</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/sbin/sysctl</string>
+        <string>iogpu.wired_limit_mb=19456</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/iogpu-wired-limit.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/iogpu-wired-limit.log</string>
+</dict>
+</plist>

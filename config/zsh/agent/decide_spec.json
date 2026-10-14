@@ -1,0 +1,229 @@
+{
+  "version": 2,
+  "_doc": [
+    "Single source of truth for decider tasks (see DECIDER_PLAN.md). Read by decide.py and _zdec in ai.zsh.",
+    "Backend: Winnow-E4B served by EldanRing/winnow-inference on :8091 via POST /v1/systemone. The server owns the prompt",
+    "format (native/protocol.h), the letter labelling, the candidate-token logits and the softmax. We only supply typed",
+    "state, a question and named options, so there are NO prompts, letters, or suffixes here — never add any.",
+    "thresholds: null = feature DISABLED (fallback 'unfitted') until agent/evals/run_decide_evals.py --fit --write fills it.",
+    "margin = p(best) - p(runner-up) over the options of ONE request (temperature-calibrated by the server)."
+  ],
+  "backend": {
+    "kind": "winnow_systemone",
+    "url": "http://127.0.0.1:8091",
+    "model": "Winnow-E4B",
+    "temperature": 0.8769,
+    "temperature_note": "refit on dev, pooled over tasks (2026-09-29): NLL 0.2197 vs 0.2229 at T=1; the model author's 1.2574 was fitted on his tasks",
+    "connect_timeout_s": 0.3,
+    "timeout_s": 5.0
+  },
+  "tasks": {
+    "memory_pair": {
+      "type": "choice",
+      "instructions": "The new fact arrived after the old fact. Should the old fact be removed?",
+      "options": {
+        "remove_old": "The new fact replaces or repeats the old fact: same subject, so the old fact is now outdated or redundant",
+        "keep_both": "Different subjects, or both facts can be true at the same time. Adding another item of the same kind does not remove the old one (two hobbies, two tools, two languages, extra details about the same thing)"
+      },
+      "swap_options": [
+        "keep_both",
+        "remove_old"
+      ],
+      "action_label": "remove_old",
+      "thresholds": {
+        "accept_margin": null
+      },
+      "fitted": {
+        "at": null,
+        "n": 0,
+        "precision": null
+      },
+      "_deprecated": "superseded by memory_rel (three-way); kept only so old eval runs still load"
+    },
+    "memory_list": {
+      "type": "choice",
+      "instructions": "Which listed fact does the new fact make outdated or merely repeat? Choose none if no listed fact is about the same subject. Different things (a dog vs a cat, two projects, a laptop vs a phone) are not the same subject.",
+      "options": "dynamic",
+      "none_label": "none",
+      "thresholds": {
+        "accept_margin": 0.904
+      },
+      "fitted": {
+        "at": "2026-09-29",
+        "n": 16,
+        "precision": 1.0
+      }
+    },
+    "route": {
+      "type": "choice",
+      "instructions": "Which kind of information does a terminal assistant need in order to answer the user's question?",
+      "options": {
+        "none": "General knowledge, explanations, how-to and opinions; nothing needs to be looked up",
+        "mac": "Live state of this Mac: processes, CPU, memory, disk, battery, network, apps, settings, crashes",
+        "repo": "Files of the current project or git repository: code, git history, project structure",
+        "files": "Files or folders elsewhere on this Mac, such as Downloads, Documents or Desktop",
+        "web": "The internet: current events, latest versions, prices, documentation lookups",
+        "compute": "Running a computation or script to get the answer: math, data crunching, testing code"
+      },
+      "thresholds": {
+        "delta": 0.2,
+        "max_groups": 3
+      },
+      "fitted": {
+        "at": "2026-09-29",
+        "n": 80,
+        "recall": 0.9583333333333334
+      }
+    },
+    "deep_hint": {
+      "type": "choice",
+      "instructions": "How much reasoning does the question need?",
+      "options": {
+        "deep": "Long, careful multi-step reasoning: a proof, a design trade-off, tricky debugging, planning or a subtle comparison",
+        "simple": "A lookup, a short explanation, a single command, a quick fact, or a check of this machine's state"
+      },
+      "swap_options": [
+        "simple",
+        "deep"
+      ],
+      "action_label": "deep",
+      "thresholds": {
+        "accept_margin": 0.133,
+        "downgrade_margin": 0.7
+      },
+      "fitted": {
+        "at": "2026-09-29",
+        "n": 14,
+        "precision": 1.0
+      }
+    },
+    "danger": {
+      "type": "choice",
+      "instructions": "The user is about to run this command in zsh on macOS. How risky is it?",
+      "options": {
+        "safe": "Read-only, or clearly harmless",
+        "project": "Ordinary, easily reversible changes inside the current project: build, install, edit, create, commit, run tests",
+        "destructive": "Discards work or is hard to undo, even inside the project (hard reset, clean, force push, deleting branches); or deletes or changes data outside the project; or changes system settings",
+        "remote_exec": "Downloads code from the network and runs it"
+      },
+      "action_labels": [
+        "destructive",
+        "remote_exec"
+      ],
+      "thresholds": {
+        "accept_margin": 0.06
+      },
+      "fitted": {
+        "at": "2026-09-29",
+        "n": 29,
+        "precision": 1.0
+      }
+    },
+    "memory_rel": {
+      "type": "choice",
+      "instructions": "How does the new fact relate to the old fact?",
+      "data": "memory_rel",
+      "action_labels": [
+        "replaces",
+        "repeats"
+      ],
+      "group_actions": true,
+      "thresholds": {
+        "accept_margin": 0.99
+      },
+      "fitted": {
+        "at": "2026-09-29",
+        "n": 19,
+        "precision": 1.0
+      },
+      "options": {
+        "replaces": "Same subject with a changed value: the new fact makes the old fact outdated",
+        "repeats": "Says the same thing as the old fact in other words",
+        "independent": "Different subjects, or both facts can be true at the same time. Adding another item of the same kind does not remove the old one (two hobbies, two tools, two languages, extra details about the same thing)"
+      }
+    },
+    "memory_rel_u": {
+      "type": "choice",
+      "instructions": "How does the new fact relate to the old fact?",
+      "data": "memory_rel",
+      "action_labels": [
+        "replaces",
+        "repeats"
+      ],
+      "group_actions": true,
+      "thresholds": {
+        "accept_margin": null
+      },
+      "fitted": {
+        "at": null,
+        "n": 0,
+        "precision": null
+      },
+      "options": {
+        "replaces": "Same subject with a changed value: the new fact makes the old fact outdated",
+        "repeats": "Says the same thing as the old fact in other words",
+        "independent": "Different subjects, or both facts can be true at the same time. Adding another item of the same kind does not remove the old one (two hobbies, two tools, two languages, extra details about the same thing)",
+        "unsure": "It cannot be told from these two facts alone"
+      }
+    },
+    "failure_class": {
+      "type": "choice",
+      "instructions": "A command failed in a macOS terminal. What kind of failure is it?",
+      "options": {
+        "typo_or_missing": "The command name does not exist: a typo, or a program that is not installed",
+        "port_in_use": "A server could not start because its port is already taken",
+        "permission": "The operating system refused access to a file or folder",
+        "wrong_venv": "A Python import failed because the project's virtualenv is not active",
+        "missing_dep": "A package or module the code imports is not installed",
+        "wrong_node": "The Node.js version in use does not match what the project needs",
+        "auth_expired": "Credentials or a login for a service were rejected",
+        "network": "The network or DNS is unreachable, or a connection timed out",
+        "service_down": "A local service or daemon this command talks to is not running",
+        "genuine_bug": "The code or tests themselves are wrong: an exception, a failing assertion or a compile error",
+        "other": "Something else: wrong arguments, a missing file, a merge conflict, no disk space, a crash"
+      },
+      "action_labels": [
+        "typo_or_missing",
+        "port_in_use",
+        "permission",
+        "wrong_venv",
+        "missing_dep",
+        "wrong_node",
+        "auth_expired",
+        "network",
+        "service_down"
+      ],
+      "thresholds": {
+        "accept_margin": null
+      },
+      "fitted": {
+        "at": null,
+        "n": 0,
+        "precision": null
+      }
+    },
+    "privacy": {
+      "type": "choice",
+      "instructions": "Is it safe to send this text to a cloud AI service that stores what it receives? What does it contain?",
+      "options": {
+        "clean": "Nothing sensitive: ordinary engineering work. Talking ABOUT passwords, keys, emails or customers is fine when no actual values appear",
+        "contains_secret": "An actual secret or credential value: an API key, token, password, private key or connection string with a password",
+        "contains_personal_data": "Personal data about real people: names with contact details, addresses, IDs, financial or health information",
+        "contains_employer_internal": "Confidential company material: internal hostnames, unreleased plans, contracts, proprietary code or algorithms, financials"
+      },
+      "action_labels": [
+        "contains_secret",
+        "contains_personal_data",
+        "contains_employer_internal"
+      ],
+      "thresholds": {
+        "accept_margin": 0.307
+      },
+      "fitted": {
+        "at": "2026-09-29",
+        "n": 26,
+        "precision": 1.0
+      }
+    }
+  }
+}
